@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: world-cup-monitoring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: world-cup-app
+  namespace: world-cup-monitoring
+  labels:
+    app: world-cup-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: world-cup-app
+  template:
+    metadata:
+      labels:
+        app: world-cup-app
+    spec:
+      containers:
+      - name: app
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            while true; do
+              for i in {1..1000000}; do echo $i > /dev/null; done
+              sleep 1
+            done
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: world-cup-app-service
+  namespace: world-cup-monitoring
+spec:
+  selector:
+    app: world-cup-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30080
+  type: NodePort
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: world-cup-hpa
+  namespace: world-cup-monitoring
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: world-cup-app
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50

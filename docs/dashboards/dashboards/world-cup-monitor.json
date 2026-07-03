@@ -1,0 +1,130 @@
+{
+  "dashboard": {
+    "title": "World Cup 2026 Monitor",
+    "uid": "world-cup-ecom",
+    "tags": ["kubernetes", "e-commerce", "fifa-2026"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Cluster CPU Usage",
+        "type": "gauge",
+        "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 },
+        "targets": [
+          {
+            "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "legendFormat": "CPU %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 70 },
+                { "color": "red", "value": 85 }
+              ]
+            },
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Pod Count (Scaling Live)",
+        "type": "stat",
+        "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 },
+        "targets": [
+          {
+            "expr": "count(kube_pod_info{namespace=\"world-cup-monitoring\"})",
+            "legendFormat": "Running Pods"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "App CPU Usage (Per Pod)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{namespace=\"world-cup-monitoring\", pod=~\"world-cup-app.*\"}[5m]) * 100",
+            "legendFormat": "{{pod}}"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "HPA Current vs Desired Replicas",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+        "targets": [
+          {
+            "expr": "kube_hpa_status_current_replicas{hpa=\"world-cup-hpa\"}",
+            "legendFormat": "Current Replicas"
+          },
+          {
+            "expr": "kube_hpa_status_desired_replicas{hpa=\"world-cup-hpa\"}",
+            "legendFormat": "Desired Replicas"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "⚽ Live World Cup Matches",
+        "type": "stat",
+        "gridPos": { "h": 8, "w": 4, "x": 0, "y": 16 },
+        "targets": [
+          {
+            "expr": "wc_live_matches_count",
+            "legendFormat": "Active Matches"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "fixed",
+              "fixedColor": "cyan"
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "🏆 Total Tournament Goals",
+        "type": "stat",
+        "gridPos": { "h": 8, "w": 4, "x": 4, "y": 16 },
+        "targets": [
+          {
+            "expr": "wc_total_goals_count",
+            "legendFormat": "Goals Scored"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "fixed",
+              "fixedColor": "green"
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "🔥 Live Match Action Intensity Index",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 16, "x": 8, "y": 16 },
+        "targets": [
+          {
+            "expr": "wc_live_match_intensity",
+            "legendFormat": "Live Match Activity"
+          }
+        ]
+      }
+    ],
+    "refresh": "15s"
+  },
+  "overwrite": true
+}

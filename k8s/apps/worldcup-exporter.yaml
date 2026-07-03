@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worldcup-exporter
+  namespace: world-cup-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worldcup-exporter
+  template:
+    metadata:
+      labels:
+        app: worldcup-exporter
+    spec:
+      containers:
+      - name: exporter
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install --no-cache-dir requests prometheus_client
+            python -u -c "
+            import time, requests, sys
+            from prometheus_client import start_http_server, Gauge
+
+            LIVE_MATCHES = Gauge('wc_live_matches_count', 'Number of matches currently live')
+            TOTAL_GOALS = Gauge('wc_total_goals_count', 'Total goals scored in the tournament')
+            MATCH_INTENSITY = Gauge('wc_live_match_intensity', 'Live match action intensity index')
+
+            start_http_server(8000)
+            print('🚀 World Cup Exporter listening on port 8000...', flush=True)
+
+            while True:
+                try:
+                    live_res = requests.get('https://worldcupjson.net/matches/current', timeout=10)
+                    if live_res.status_code == 200:
+                        live_data = live_res.json()
+                        LIVE_MATCHES.set(len(live_data) if isinstance(live_data, list) else 0)
+                        
+                        intensity = 0
+                        if isinstance(live_data, list):
+                            for match in live_data:
+                                intensity += len(match.get('home_team_events', [])) + len(match.get('away_team_events', []))
+                        MATCH_INTENSITY.set(intensity)
+
+                    all_res = requests.get('https://worldcupjson.net/matches', timeout=10)
+                    if all_res.status_code == 200:
+                        all_matches = all_res.json()
+                        if isinstance(all_matches, list):
+                            goals = sum(
+                                (m.get('home_team', {}).get('goals', 0) or 0) + 
+                                (m.get('away_team', {}).get('goals', 0) or 0)
+                                for m in all_matches if m.get('status') in ['completed', 'in_progress']
+                            )
+                            TOTAL_GOALS.set(goals)
+                except Exception as e:
+                    print(f'⚠️ Error updating metrics: {e}', file=sys.stderr, flush=True)
+                time.sleep(30)
+            "
+        ports:
+        - containerPort: 8000
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worldcup-exporter-service
+  namespace: world-cup-monitoring
+  labels:
+    app: worldcup-exporter
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+  selector:
+    app: worldcup-exporter

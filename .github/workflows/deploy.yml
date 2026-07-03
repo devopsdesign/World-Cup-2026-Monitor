@@ -1,0 +1,293 @@
+name: Deploy K3s + Monitoring Stack
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform Action'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+          - apply
+          - destroy
+
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+
+    steps:
+      # 1. Checkout Code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      # 3. Setup AWS CLI
+      - name: Setup AWS CLI
+        run: |
+          aws --version
+
+      # 4. Initialize Terraform
+      - name: Terraform Init
+        working-directory: ./infra
+        run: terraform init
+
+      # 5. Run Terraform (Apply or Destroy)
+      - name: Terraform ${{ github.event.inputs.action || 'apply' }}
+        working-directory: ./infra
+        run: |
+          if [ "${{ github.event.inputs.action || 'apply' }}" == "apply" ]; then
+            terraform apply -auto-approve
+          else
+            terraform destroy -auto-approve
+          fi
+
+      # 6. Get EC2 Public IP
+      - name: Get EC2 Public IP
+        id: get_ip
+        working-directory: ./infra
+        run: |
+          IP=$(terraform output -raw ec2_public_ip)
+          echo "ec2_public_ip=$IP" >> $GITHUB_OUTPUT
+          echo "IP is: $IP"
+
+      # 7. Save Private Key
+      - name: Save Private Key
+        working-directory: ./infra
+        run: |
+          KEY_CONTENT=$(terraform output -raw k3s_private_key_pem 2>/dev/null || echo "")
+          
+          if [ -z "$KEY_CONTENT" ]; then
+            if [ ! -z "${{ secrets.K3S_PRIVATE_KEY }}" ]; then
+              echo "${{ secrets.K3S_PRIVATE_KEY }}" > k3s-key.pem
+            else
+              echo "Error: No private key found in Terraform output or Secrets."
+              exit 1
+            fi
+          else
+            echo "$KEY_CONTENT" > k3s-key.pem
+          fi
+          chmod 400 k3s-key.pem
+
+      # 8. Wait for K3s API Server to be Ready (INCREASED TIMEOUT)
+      - name: Wait for K3s API Server
+        run: |
+          IP="${{ steps.get_ip.outputs.ec2_public_ip }}"
+          echo "Waiting for K3s API on https://$IP:6443..."
+          
+          # Loop up to 10 minutes (60 attempts * 10s)
+          SUCCESS=false
+          for i in {1..60}; do
+            echo "Attempt $i/60: Checking HTTPS connectivity..."
+            if curl -k -s --connect-timeout 5 https://$IP:6443/healthz > /dev/null 2>&1; then
+              echo "✅ K3s API is ready!"
+              SUCCESS=true
+              break
+            fi
+            echo "⏳ K3s not ready yet. Waiting 10s..."
+            sleep 10
+          done
+
+          if [ "$SUCCESS" != "true" ]; then
+            echo "❌ K3s API failed to start after 10 minutes."
+            echo "🔍 Debug: Checking instance logs via SSH..."
+            if [ -f "./infra/k3s-key.pem" ]; then
+              chmod 600 ./infra/k3s-key.pem
+              ssh -i ./infra/k3s-key.pem -o StrictHostKeyChecking=no ubuntu@$IP "sudo tail -n 50 /var/log/user-data.log" || true
+            fi
+            exit 1
+          fi
+
+      # 9. Extract Kubeconfig (ROBUST VERSION)
+      - name: Extract Kubeconfig
+        run: |
+          IP="${{ steps.get_ip.outputs.ec2_public_ip }}"
+          KEY_PATH="./infra/k3s-key.pem"
+          
+          echo "🔍 DEBUG: Current directory: $(pwd)"
+          echo "🔍 DEBUG: Looking for key at: $KEY_PATH"
+          
+          if [ ! -f "$KEY_PATH" ]; then
+            echo "❌ FATAL: Private key NOT FOUND at $KEY_PATH"
+            ls -la ./infra/ || true
+            exit 1
+          fi
+          
+          chmod 600 "$KEY_PATH"
+          echo "✅ Key permissions set to 600."
+
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          SSH_SUCCESS=false
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "🔄 Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES to SSH into $IP..."
+            if ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o ServerAliveCountMax=3 -o ServerAliveInterval=15 ubuntu@$IP "sudo cat /etc/rancher/k3s/k3s.yaml" > kubeconfig_raw 2>ssh_debug.log; then
+              SSH_SUCCESS=true
+              break
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "⚠️ SSH failed. Retrying in 10s..."
+                sleep 10
+              else
+                echo "❌ SSH Command FAILED after $MAX_RETRIES attempts."
+                cat ssh_debug.log
+                exit 1
+              fi
+            fi
+          done
+
+          if [ "$SSH_SUCCESS" != "true" ]; then
+            exit 1
+          fi
+
+          if [ ! -s kubeconfig_raw ]; then
+            echo "❌ FATAL: kubeconfig_raw is empty."
+            exit 1
+          fi
+
+          echo "🔄 Replacing localhost addresses with public IP ($IP:6443)..."
+          sed -i "s|https://127.0.0.1:6443|https://$IP:6443|g" kubeconfig_raw
+          sed -i "s|https://localhost:6443|https://$IP:6443|g" kubeconfig_raw
+          sed -i "s|https://0.0.0.0:6443|https://$IP:6443|g" kubeconfig_raw
+          
+          mv kubeconfig_raw kubeconfig
+          
+          echo "✅ Kubeconfig created successfully."
+
+      # 10. Deploy Monitoring Architecture (WITH INLINE RETRIES)
+      - name: Deploy Monitoring Stack
+        env:
+          KUBECONFIG: ./kubeconfig
+        run: |
+          echo "🔄 Attempting to deploy monitoring stack..."
+          MANIFESTS=(
+            "k8s/monitoring/prometheus-rbac.yaml"
+            "k8s/monitoring/monitoring.yaml"
+            "k8s/apps/worldcup-exporter.yaml"
+          )
+
+          for manifest in "${MANIFESTS[@]}"; do
+            MAX_RETRIES=5
+            RETRY_COUNT=0
+            SUCCESS=false
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              echo "Applying $manifest (Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)..."
+              if kubectl apply -f "$manifest"; then
+                echo "✅ Successfully applied $manifest"
+                SUCCESS=true
+                break
+              else
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                  echo "⚠️ Failed. Waiting 15s before retry..."
+                  sleep 15
+                fi
+              fi
+            done
+
+            if [ "$SUCCESS" = "false" ]; then
+              exit 1
+            fi
+          done
+          
+          echo "⏳ Waiting for Grafana to be available..."
+          kubectl wait --for=condition=available deployment/grafana -n world-cup-monitoring --timeout=450s
+          
+          echo "⏳ Waiting for Prometheus to be ready..."
+          kubectl wait --for=condition=available deployment/prometheus -n world-cup-monitoring --timeout=450s
+
+      # 11. Deploy Application
+      - name: Deploy Application
+        env:
+          KUBECONFIG: ./kubeconfig
+        run: |
+          IP="${{ steps.get_ip.outputs.ec2_public_ip }}"
+          echo "🔄 Validating API server stability before final application rollout..."
+          
+          for i in {1..6}; do
+            if curl -k -s --max-time 10 https://$IP:6443/healthz > /dev/null; then
+              echo "✅ API server handshake stable."
+              break
+            fi
+            sleep 20
+          done
+
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          SUCCESS=false
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if kubectl apply -f k8s/apps/app-deployment.yaml --validate=false; then
+              SUCCESS=true
+              break
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              sleep 20
+            fi
+          done
+
+          if [ "$SUCCESS" = "true" ]; then
+            kubectl wait --for=condition=available deployment/world-cup-app -n world-cup-monitoring --timeout=300s || true
+          else
+            exit 1
+          fi
+
+      # 12. Import Grafana Dashboards
+      - name: Import Grafana Dashboards
+        env:
+          KUBECONFIG: ./kubeconfig
+          EC2_IP: ${{ steps.get_ip.outputs.ec2_public_ip }}
+        run: |
+          chmod +x scripts/import-dashboards.sh
+          ./scripts/import-dashboards.sh
+
+      # 13. Generate Deployment Summary (FIXED & MOVED TO END)
+      - name: Generate Deployment Summary
+        if: success() && (github.event.inputs.action != 'destroy')
+        run: |
+          PUBLIC_IP="${{ steps.get_ip.outputs.ec2_public_ip }}"
+          
+          echo "## 🏆 World Cup 2026 Monitor - Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 **Status:** Deployment successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Monitoring Dashboards & Links" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | URL | Default Credentials | Description |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📈 **Grafana** | [http://$PUBLIC_IP:30030](http://$PUBLIC_IP:30030) | \`admin\` / \`admin\` | Live Match Analytics & Infrastructure Dashboards |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔥 **Prometheus** | [http://$PUBLIC_IP:30090](http://$PUBLIC_IP:30090) | *None* | Raw PromQL Metric Queries & Scrape Target Status |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🐍 **App Exporter** | \`Internal Only (ClusterIP)\` | *None* | Python Metrics Exporter (Port 8000) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ⚡ Quick Verification Commands" >> $GITHUB_STEP_SUMMARY
+          echo "To test connection to your cluster from your local terminal:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "curl -I http://$PUBLIC_IP:30030/login" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      # 14. Upload Kubeconfig Artifact
+      - name: Upload Kubeconfig Artifact
+        if: always() && (github.event.inputs.action != 'destroy')
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubeconfig
+          path: ${{ github.workspace }}/kubeconfig
+          retention-days: 7
+          if-no-files-found: warn
+
+      # 15. Clean up local key copy
+      - name: Post Cleanup Key
+        run: rm -f ./infra/k3s-key.pem

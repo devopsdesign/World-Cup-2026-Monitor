@@ -1,0 +1,47 @@
+# Infrastructure Private Keys
+infra/*.pem
+.terraform/
+terraform.tfstate*
+# OS and editor files
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Dependencies
+src/exporter/__pycache__/
+src/exporter/.pytest_cache/
+.env
+venv/
+.venv/
+node_modules/
+
+# Secrets and keys
+*.pem
+*.key
+*.crt
+secrets/
+.env.local
+
+# Terraform state
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Kubernetes secrets (if any)
+k8s/*secret*.yaml
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Docker
+.docker/
+
+PERSONAL_NOTES.md
+PORTFOLIO_NARRATIVE.txt
