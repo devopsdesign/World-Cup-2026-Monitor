@@ -46,3 +46,5 @@ build/
 PERSONAL_NOTES.md
 .kube/
 PORTFOLIO_NARRATIVE.txt
++.pdf
+*.dot
