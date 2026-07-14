@@ -6,7 +6,7 @@
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=Prometheus&logoColor=white)](https://prometheus.io/)
 [![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=Grafana&logoColor=white)](https://grafana.com/)
 
-A real-time, cloud-native monitoring platform for the 2026 FIFA World Cup. Built with **Kubernetes (K3s)**, **Prometheus**, **Grafana**, and a custom **Python metric exporter**, this project serves as an end-to-end demonstration of resilient DevOps practices deployed entirely inside the **AWS Free Tier**.
+A real-time, cloud-native monitoring platform for the 2026 World Cup. Built with **Kubernetes (K3s)**, **Prometheus**, **Grafana**, and a custom **Python metric exporter**, this project serves as an end-to-end demonstration of resilient DevOps practices deployed entirely inside the **AWS Free Tier**.
 
 ---
 
