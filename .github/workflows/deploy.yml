@@ -1,293 +1,278 @@
-name: Deploy K3s + Monitoring Stack
+name: Deploy K3s + Monitoring Stack (Hardened)
+
+# Required one-time setup (see README "Deploying" section):
+#   Repo Variables (Settings -> Actions -> Variables):
+#     AWS_REGION, AWS_DEPLOY_ROLE_ARN, TF_STATE_BUCKET, TF_LOCK_TABLE,
+#     GRAFANA_NODEPORT_CIDR, BUDGET_ALERT_EMAIL, MONTHLY_BUDGET_USD,
+#     DOCKERHUB_USERNAME
+#   Repo/Environment Secrets (Settings -> Environments -> production):
+#     DOCKERHUB_TOKEN, GRAFANA_ADMIN_PASSWORD
+#   Environment "production" should have required reviewers configured
+#   so `apply`/`destroy` runs need a human approval.
+#
+# There is no AWS access key/secret anywhere in this file — auth is
+# short-lived GitHub OIDC -> AWS IAM role (see infra/bootstrap/main.tf).
+# There is no SSH key and no direct Kubernetes API access: all
+# in-cluster work happens via AWS SSM Run Command against the node's
+# local (loopback-only) k3s API.
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
     inputs:
       action:
-        description: 'Terraform Action'
+        description: "Terraform action"
         required: true
-        default: 'apply'
+        default: "apply"
         type: choice
-        options:
-          - apply
-          - destroy
+        options: ["apply", "destroy"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: world-cup-monitor-deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE }}
+  IMAGE_NAME: ${{ vars.DOCKERHUB_USERNAME }}/worldcup-web
 
 jobs:
-  lifecycle:
+  determine-action:
     runs-on: ubuntu-latest
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: ${{ secrets.AWS_REGION }}
-
+    outputs:
+      action: ${{ steps.pick.outputs.action }}
     steps:
-      # 1. Checkout Code
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      # 2. Setup Terraform
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.0
-
-      # 3. Setup AWS CLI
-      - name: Setup AWS CLI
+      - name: Pick action
+        id: pick
+        env:
+          DISPATCH_ACTION: ${{ github.event.inputs.action }}
         run: |
-          aws --version
+          echo "action=${DISPATCH_ACTION:-apply}" >> "$GITHUB_OUTPUT"
 
-      # 4. Initialize Terraform
+  build:
+    needs: determine-action
+    if: needs.determine-action.outputs.action == 'apply'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Compute image tag
+        id: tag
+        run: echo "image_tag=${IMAGE_NAME}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Docker Hub login
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
+
+      - name: Build and push worldcup-web
+        uses: docker/build-push-action@5cd11c3a4ced054e52742c5fd54dca954e0edd85 # v6.7.0
+        with:
+          context: ./src/app
+          push: true
+          tags: ${{ steps.tag.outputs.image_tag }}
+
+  deploy:
+    needs: [determine-action, build]
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TF_ACTION: ${{ needs.determine-action.outputs.action }}
+      TF_VAR_project_name: world-cup-monitor
+      TF_VAR_tf_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_tf_lock_table: ${{ vars.TF_LOCK_TABLE }}
+      TF_VAR_grafana_nodeport_cidr: ${{ vars.GRAFANA_NODEPORT_CIDR }}
+      TF_VAR_budget_alert_email: ${{ vars.BUDGET_ALERT_EMAIL }}
+      TF_VAR_monthly_budget_usd: ${{ vars.MONTHLY_BUDGET_USD }}
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure AWS credentials (OIDC — no static keys)
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.0"
+
       - name: Terraform Init
         working-directory: ./infra
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="dynamodb_table=$TF_LOCK_TABLE" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="key=k3s-cluster/terraform.tfstate" \
+            -backend-config="encrypt=true"
 
-      # 5. Run Terraform (Apply or Destroy)
-      - name: Terraform ${{ github.event.inputs.action || 'apply' }}
+      - name: Terraform Apply
+        if: env.TF_ACTION == 'apply'
+        working-directory: ./infra
+        run: terraform apply -auto-approve
+
+      - name: Terraform Destroy
+        if: env.TF_ACTION == 'destroy'
+        working-directory: ./infra
+        run: terraform destroy -auto-approve
+
+      - name: Read Terraform outputs
+        if: env.TF_ACTION == 'apply'
+        id: tf
         working-directory: ./infra
         run: |
-          if [ "${{ github.event.inputs.action || 'apply' }}" == "apply" ]; then
-            terraform apply -auto-approve
-          else
-            terraform destroy -auto-approve
-          fi
+          echo "instance_id=$(terraform output -raw ec2_instance_id)" >> "$GITHUB_OUTPUT"
+          echo "public_ip=$(terraform output -raw ec2_public_ip)" >> "$GITHUB_OUTPUT"
+          echo "manifest_bucket=$(terraform output -raw manifest_bucket)" >> "$GITHUB_OUTPUT"
 
-      # 6. Get EC2 Public IP
-      - name: Get EC2 Public IP
-        id: get_ip
-        working-directory: ./infra
+      - name: Wait for SSM agent to come online
+        if: env.TF_ACTION == 'apply'
+        env:
+          INSTANCE_ID: ${{ steps.tf.outputs.instance_id }}
         run: |
-          IP=$(terraform output -raw ec2_public_ip)
-          echo "ec2_public_ip=$IP" >> $GITHUB_OUTPUT
-          echo "IP is: $IP"
-
-      # 7. Save Private Key
-      - name: Save Private Key
-        working-directory: ./infra
-        run: |
-          KEY_CONTENT=$(terraform output -raw k3s_private_key_pem 2>/dev/null || echo "")
-          
-          if [ -z "$KEY_CONTENT" ]; then
-            if [ ! -z "${{ secrets.K3S_PRIVATE_KEY }}" ]; then
-              echo "${{ secrets.K3S_PRIVATE_KEY }}" > k3s-key.pem
-            else
-              echo "Error: No private key found in Terraform output or Secrets."
-              exit 1
+          echo "Waiting for SSM agent on $INSTANCE_ID..."
+          for i in $(seq 1 30); do
+            STATUS=$(aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+              --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null || echo "")
+            if [ "$STATUS" = "Online" ]; then
+              echo "SSM agent online."
+              exit 0
             fi
-          else
-            echo "$KEY_CONTENT" > k3s-key.pem
-          fi
-          chmod 400 k3s-key.pem
-
-      # 8. Wait for K3s API Server to be Ready (INCREASED TIMEOUT)
-      - name: Wait for K3s API Server
-        run: |
-          IP="${{ steps.get_ip.outputs.ec2_public_ip }}"
-          echo "Waiting for K3s API on https://$IP:6443..."
-          
-          # Loop up to 10 minutes (60 attempts * 10s)
-          SUCCESS=false
-          for i in {1..60}; do
-            echo "Attempt $i/60: Checking HTTPS connectivity..."
-            if curl -k -s --connect-timeout 5 https://$IP:6443/healthz > /dev/null 2>&1; then
-              echo "✅ K3s API is ready!"
-              SUCCESS=true
-              break
-            fi
-            echo "⏳ K3s not ready yet. Waiting 10s..."
+            echo "Attempt $i/30: SSM status='$STATUS'. Waiting 10s..."
             sleep 10
           done
+          echo "SSM agent never came online." >&2
+          exit 1
 
-          if [ "$SUCCESS" != "true" ]; then
-            echo "❌ K3s API failed to start after 10 minutes."
-            echo "🔍 Debug: Checking instance logs via SSH..."
-            if [ -f "./infra/k3s-key.pem" ]; then
-              chmod 600 ./infra/k3s-key.pem
-              ssh -i ./infra/k3s-key.pem -o StrictHostKeyChecking=no ubuntu@$IP "sudo tail -n 50 /var/log/user-data.log" || true
-            fi
-            exit 1
-          fi
+      - name: Setup kubectl (client only — no cluster access from the runner)
+        if: env.TF_ACTION == 'apply'
+        uses: azure/setup-kubectl@3e0aec4d80787158d308d7b364cb1b702e7feb7f # v4.0.0
 
-      # 9. Extract Kubeconfig (ROBUST VERSION)
-      - name: Extract Kubeconfig
-        run: |
-          IP="${{ steps.get_ip.outputs.ec2_public_ip }}"
-          KEY_PATH="./infra/k3s-key.pem"
-          
-          echo "🔍 DEBUG: Current directory: $(pwd)"
-          echo "🔍 DEBUG: Looking for key at: $KEY_PATH"
-          
-          if [ ! -f "$KEY_PATH" ]; then
-            echo "❌ FATAL: Private key NOT FOUND at $KEY_PATH"
-            ls -la ./infra/ || true
-            exit 1
-          fi
-          
-          chmod 600 "$KEY_PATH"
-          echo "✅ Key permissions set to 600."
-
-          MAX_RETRIES=5
-          RETRY_COUNT=0
-          SSH_SUCCESS=false
-          
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            echo "🔄 Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES to SSH into $IP..."
-            if ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o ServerAliveCountMax=3 -o ServerAliveInterval=15 ubuntu@$IP "sudo cat /etc/rancher/k3s/k3s.yaml" > kubeconfig_raw 2>ssh_debug.log; then
-              SSH_SUCCESS=true
-              break
-            else
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                echo "⚠️ SSH failed. Retrying in 10s..."
-                sleep 10
-              else
-                echo "❌ SSH Command FAILED after $MAX_RETRIES attempts."
-                cat ssh_debug.log
-                exit 1
-              fi
-            fi
-          done
-
-          if [ "$SSH_SUCCESS" != "true" ]; then
-            exit 1
-          fi
-
-          if [ ! -s kubeconfig_raw ]; then
-            echo "❌ FATAL: kubeconfig_raw is empty."
-            exit 1
-          fi
-
-          echo "🔄 Replacing localhost addresses with public IP ($IP:6443)..."
-          sed -i "s|https://127.0.0.1:6443|https://$IP:6443|g" kubeconfig_raw
-          sed -i "s|https://localhost:6443|https://$IP:6443|g" kubeconfig_raw
-          sed -i "s|https://0.0.0.0:6443|https://$IP:6443|g" kubeconfig_raw
-          
-          mv kubeconfig_raw kubeconfig
-          
-          echo "✅ Kubeconfig created successfully."
-
-      # 10. Deploy Monitoring Architecture (WITH INLINE RETRIES)
-      - name: Deploy Monitoring Stack
+      - name: Render manifests
+        if: env.TF_ACTION == 'apply'
         env:
-          KUBECONFIG: ./kubeconfig
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: |
-          echo "🔄 Attempting to deploy monitoring stack..."
-          MANIFESTS=(
-            "k8s/monitoring/prometheus-rbac.yaml"
-            "k8s/monitoring/monitoring.yaml"
-            "k8s/apps/worldcup-exporter.yaml"
+          rm -rf rendered
+          cp -r k8s rendered
+
+          sed -i "s|IMAGE_PLACEHOLDER|${IMAGE_TAG}|g" rendered/apps/web-deployment.yaml
+
+          # Generated at deploy time from the GitHub Actions secret — this
+          # file is never committed to git and never printed.
+          kubectl create secret generic grafana-admin-credentials \
+            --namespace world-cup-monitoring \
+            --from-literal=admin-user=admin \
+            --from-literal=admin-password="$GRAFANA_ADMIN_PASSWORD" \
+            --dry-run=client -o yaml > rendered/monitoring/grafana-secret.yaml
+
+      - name: Stage manifests to S3
+        if: env.TF_ACTION == 'apply'
+        env:
+          MANIFEST_BUCKET: ${{ steps.tf.outputs.manifest_bucket }}
+        run: aws s3 sync ./rendered "s3://$MANIFEST_BUCKET/k8s" --delete
+
+      - name: Apply manifests via SSM (no direct Kubernetes API access)
+        if: env.TF_ACTION == 'apply'
+        env:
+          INSTANCE_ID: ${{ steps.tf.outputs.instance_id }}
+          MANIFEST_BUCKET: ${{ steps.tf.outputs.manifest_bucket }}
+        run: |
+          SCRIPT=$(cat <<'EOS'
+          set -e
+          aws s3 sync "s3://__BUCKET__/k8s" /tmp/k8s --delete
+          k3s kubectl apply -f /tmp/k8s/namespace.yaml
+          k3s kubectl apply -R -f /tmp/k8s/monitoring -f /tmp/k8s/apps
+          k3s kubectl -n world-cup-monitoring rollout status deployment/world-cup-web --timeout=180s
+          k3s kubectl -n world-cup-monitoring rollout status deployment/prometheus --timeout=180s
+          k3s kubectl -n world-cup-monitoring rollout status deployment/grafana --timeout=180s
+          EOS
           )
+          SCRIPT="${SCRIPT//__BUCKET__/$MANIFEST_BUCKET}"
 
-          for manifest in "${MANIFESTS[@]}"; do
-            MAX_RETRIES=5
-            RETRY_COUNT=0
-            SUCCESS=false
-            
-            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              echo "Applying $manifest (Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)..."
-              if kubectl apply -f "$manifest"; then
-                echo "✅ Successfully applied $manifest"
-                SUCCESS=true
-                break
-              else
-                RETRY_COUNT=$((RETRY_COUNT + 1))
-                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                  echo "⚠️ Failed. Waiting 15s before retry..."
-                  sleep 15
-                fi
-              fi
-            done
+          PAYLOAD=$(jq -n --arg s "$SCRIPT" '{commands: [$s]}')
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "world-cup-monitor deploy $GITHUB_SHA" \
+            --parameters "$PAYLOAD" \
+            --query 'Command.CommandId' --output text)
 
-            if [ "$SUCCESS" = "false" ]; then
+          echo "SSM command: $CMD_ID"
+          for i in $(seq 1 30); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+              --query 'Status' --output text 2>/dev/null || echo "Pending")
+            echo "Attempt $i/30: status=$STATUS"
+            if [ "$STATUS" = "Success" ]; then
+              aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+                --query 'StandardOutputContent' --output text
+              exit 0
+            fi
+            if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ] || [ "$STATUS" = "TimedOut" ]; then
+              echo "--- stdout ---"
+              aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+                --query 'StandardOutputContent' --output text
+              echo "--- stderr ---"
+              aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+                --query 'StandardErrorContent' --output text
               exit 1
             fi
+            sleep 10
           done
-          
-          echo "⏳ Waiting for Grafana to be available..."
-          kubectl wait --for=condition=available deployment/grafana -n world-cup-monitoring --timeout=450s
-          
-          echo "⏳ Waiting for Prometheus to be ready..."
-          kubectl wait --for=condition=available deployment/prometheus -n world-cup-monitoring --timeout=450s
+          echo "SSM command did not finish in time." >&2
+          exit 1
 
-      # 11. Deploy Application
-      - name: Deploy Application
+      - name: Import Grafana dashboards
+        if: env.TF_ACTION == 'apply'
         env:
-          KUBECONFIG: ./kubeconfig
-        run: |
-          IP="${{ steps.get_ip.outputs.ec2_public_ip }}"
-          echo "🔄 Validating API server stability before final application rollout..."
-          
-          for i in {1..6}; do
-            if curl -k -s --max-time 10 https://$IP:6443/healthz > /dev/null; then
-              echo "✅ API server handshake stable."
-              break
-            fi
-            sleep 20
-          done
-
-          MAX_RETRIES=3
-          RETRY_COUNT=0
-          SUCCESS=false
-
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if kubectl apply -f k8s/apps/app-deployment.yaml --validate=false; then
-              SUCCESS=true
-              break
-            else
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-              sleep 20
-            fi
-          done
-
-          if [ "$SUCCESS" = "true" ]; then
-            kubectl wait --for=condition=available deployment/world-cup-app -n world-cup-monitoring --timeout=300s || true
-          else
-            exit 1
-          fi
-
-      # 12. Import Grafana Dashboards
-      - name: Import Grafana Dashboards
-        env:
-          KUBECONFIG: ./kubeconfig
-          EC2_IP: ${{ steps.get_ip.outputs.ec2_public_ip }}
+          GRAFANA_URL: http://${{ steps.tf.outputs.public_ip }}:30030
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: |
           chmod +x scripts/import-dashboards.sh
           ./scripts/import-dashboards.sh
 
-      # 13. Generate Deployment Summary (FIXED & MOVED TO END)
-      - name: Generate Deployment Summary
-        if: success() && (github.event.inputs.action != 'destroy')
+      - name: Deployment summary
+        if: success() && env.TF_ACTION == 'apply'
+        env:
+          PUBLIC_IP: ${{ steps.tf.outputs.public_ip }}
+          INSTANCE_ID: ${{ steps.tf.outputs.instance_id }}
         run: |
-          PUBLIC_IP="${{ steps.get_ip.outputs.ec2_public_ip }}"
-          
-          echo "## 🏆 World Cup 2026 Monitor - Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "🚀 **Status:** Deployment successful!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📊 Monitoring Dashboards & Links" >> $GITHUB_STEP_SUMMARY
-          echo "| Service | URL | Default Credentials | Description |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📈 **Grafana** | [http://$PUBLIC_IP:30030](http://$PUBLIC_IP:30030) | \`admin\` / \`admin\` | Live Match Analytics & Infrastructure Dashboards |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔥 **Prometheus** | [http://$PUBLIC_IP:30090](http://$PUBLIC_IP:30090) | *None* | Raw PromQL Metric Queries & Scrape Target Status |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🐍 **App Exporter** | \`Internal Only (ClusterIP)\` | *None* | Python Metrics Exporter (Port 8000) |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ⚡ Quick Verification Commands" >> $GITHUB_STEP_SUMMARY
-          echo "To test connection to your cluster from your local terminal:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "curl -I http://$PUBLIC_IP:30030/login" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-
-      # 14. Upload Kubeconfig Artifact
-      - name: Upload Kubeconfig Artifact
-        if: always() && (github.event.inputs.action != 'destroy')
-        uses: actions/upload-artifact@v4
-        with:
-          name: kubeconfig
-          path: ${{ github.workspace }}/kubeconfig
-          retention-days: 7
-          if-no-files-found: warn
-
-      # 15. Clean up local key copy
-      - name: Post Cleanup Key
-        run: rm -f ./infra/k3s-key.pem
+          {
+            echo "## World Cup 2026 Monitor - Deployment Summary"
+            echo "Status: deployment succeeded."
+            echo ""
+            echo "| Service | URL | Credentials |"
+            echo "| :-- | :-- | :-- |"
+            echo "| App (frontend + API + /metrics) | http://$PUBLIC_IP:30080 | none (public) |"
+            echo "| Grafana | http://$PUBLIC_IP:30030 | admin / value of the GRAFANA_ADMIN_PASSWORD secret |"
+            echo "| Prometheus | not internet-exposed | reach it via an SSM port-forward tunnel |"
+            echo ""
+            echo "No SSH key and no public Kubernetes API exist for this deployment."
+            echo "For shell/kubectl access, use AWS SSM Session Manager against instance $INSTANCE_ID."
+          } >> "$GITHUB_STEP_SUMMARY"

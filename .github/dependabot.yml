@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Actions in the workflows are pinned to commit SHA with a version
+    # comment (e.g. `uses: actions/checkout@<sha> # v4.2.2`). Dependabot
+    # understands that convention and opens PRs that bump the SHA (and
+    # the comment) on new releases, keeping the pin both immutable and
+    # up to date without anyone hand-editing SHAs.
+
+  - package-ecosystem: "docker"
+    directory: "/src/app"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/src/app"
+    schedule:
+      interval: "weekly"

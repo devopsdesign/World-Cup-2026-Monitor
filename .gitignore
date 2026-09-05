@@ -28,8 +28,9 @@ secrets/
 *.tfstate.backup
 .terraform/
 
-# Kubernetes secrets (if any)
+# Kubernetes secrets (if any) — includes the CI-rendered Grafana secret
 k8s/*secret*.yaml
+rendered/
 
 # Logs
 *.log

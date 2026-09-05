@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>World Cup 2026 Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="stadium-glow" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="ball">⚽</span>
+      <span class="brand-text">WORLD CUP <strong>2026</strong> MONITOR</span>
+    </div>
+    <div class="status-pill" id="connStatus">
+      <span class="dot"></span> <span id="connStatusText">connecting…</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Match Day Control Room</h1>
+      <p>Live scores, match intensity, and tournament totals — refreshed every 15 seconds.</p>
+    </section>
+
+    <section class="stat-row" aria-label="Tournament totals">
+      <div class="stat-card">
+        <div class="stat-label">Live Matches</div>
+        <div class="stat-value" id="statLive">–</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Tournament Goals</div>
+        <div class="stat-value" id="statGoals">–</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Last Update</div>
+        <div class="stat-value stat-value--small" id="statUpdated">–</div>
+      </div>
+    </section>
+
+    <section class="pitch">
+      <h2>Live Scoreboards</h2>
+      <div id="matchGrid" class="match-grid">
+        <p class="empty-state" id="emptyState">No live matches right now — check back on match day.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Metrics: <code>/metrics</code> · API: <code>/api/live</code> · Data via worldcupjson.net</p>
+  </footer>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
