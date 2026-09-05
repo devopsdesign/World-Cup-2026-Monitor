@@ -28,6 +28,9 @@ secrets/
 *.tfstate.backup
 .terraform/
 
+# Terraform partial backend config (contains your AWS account ID)
+infra/backend.hcl
+
 # Kubernetes secrets (if any) — includes the CI-rendered Grafana secret
 k8s/*secret*.yaml
 rendered/

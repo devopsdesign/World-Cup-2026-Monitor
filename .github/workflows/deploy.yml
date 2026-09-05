@@ -2,7 +2,7 @@ name: Deploy K3s + Monitoring Stack (Hardened)
 
 # Required one-time setup (see README "Deploying" section):
 #   Repo Variables (Settings -> Actions -> Variables):
-#     AWS_REGION, AWS_DEPLOY_ROLE_ARN, TF_STATE_BUCKET, TF_LOCK_TABLE,
+#     AWS_REGION, AWS_ROLE_ARN, TF_STATE_BUCKET, TF_LOCK_TABLE,
 #     GRAFANA_NODEPORT_CIDR, BUDGET_ALERT_EMAIL, MONTHLY_BUDGET_USD,
 #     DOCKERHUB_USERNAME
 #   Repo/Environment Secrets (Settings -> Environments -> production):
@@ -112,7 +112,7 @@ jobs:
       - name: Configure AWS credentials (OIDC — no static keys)
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Setup Terraform

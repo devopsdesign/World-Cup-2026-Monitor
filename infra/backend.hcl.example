@@ -1,0 +1,12 @@
+# Copy to infra/backend.hcl (gitignored) and fill in your AWS account ID,
+# then:  terraform init -backend-config=backend.hcl
+#
+# Get the value from the bootstrap output:
+#   terraform -chdir=bootstrap output -raw state_bucket_name
+
+bucket = "world-cup-monitor-tfstate-<YOUR_AWS_ACCOUNT_ID>"
+
+# The rest (key, region, dynamodb_table, encrypt, kms_key_id) are already
+# declared in infra/main.tf's backend block. Override here only if you
+# deploy into a non-default region.
+# region = "us-east-1"

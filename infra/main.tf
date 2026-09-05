@@ -9,11 +9,22 @@
 ########################################################################
 
 terraform {
+  # Remote state lives in the bucket/table/CMK created by infra/bootstrap.
+  # `bucket` embeds your AWS account ID, so it is supplied at init time
+  # (partial backend config) rather than hardcoded here:
+  #
+  #   Local:  terraform init -backend-config=backend.hcl
+  #           (copy infra/backend.hcl.example -> infra/backend.hcl first)
+  #   CI:     see the `terraform init -backend-config=...` flags in
+  #           .github/workflows/deploy.yml
+  #
+  # Everything that is fixed and non-sensitive is declared inline.
   backend "s3" {
-    # Filled in at `terraform init -backend-config=...` time (see
-    # .github/workflows/deploy.yml) using the bucket/table produced by
-    # infra/bootstrap. Left blank here on purpose — do not hardcode a
-    # bucket name in source.
+    key            = "k3s-cluster/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "world-cup-monitor-tf-locks"
+    encrypt        = true
+    kms_key_id     = "alias/world-cup-monitor-tfstate"
   }
 
   required_providers {

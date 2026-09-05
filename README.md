@@ -99,26 +99,40 @@ access, if you ever need it, goes through **SSM Session Manager**.
 ## One-time setup (per AWS account)
 
 1. **Bootstrap the backend + OIDC role** (local Terraform, run once by
-   a human with AWS admin access):
+   a human with AWS admin credentials):
    ```bash
    cd infra/bootstrap
    terraform init
    terraform apply \
-     -var="project_name=world-cup-monitor" \
      -var="github_owner=<your-github-org-or-user>" \
      -var="github_repo=World-Cup-2026-Monitor"
+   #   -var="aws_region=us-east-1"   # only if not us-east-1
+
+   terraform output          # copy these values into the repo config below
    ```
-   Note the outputs: `state_bucket_name`, `lock_table_name`,
-   `github_actions_role_arn`.
+   Outputs: `state_bucket_name`, `lock_table_name`, `state_kms_key_arn`,
+   `state_kms_key_alias`, `aws_role_arn`, `aws_region`.
 
-2. **Docker Hub**: create an access token for pushing the app image.
+2. **Wire up the remote backend** for the main stack:
+   ```bash
+   cd ../                    # infra/
+   cp backend.hcl.example backend.hcl
+   # edit backend.hcl: set bucket = <state_bucket_name from step 1>
+   ```
+   (`infra/backend.hcl` is gitignored — it holds your account ID. CI
+   passes the same values via `-backend-config` flags instead.)
 
-3. **Configure the repo** (Settings → Actions):
-   - **Variables**: `AWS_REGION` (e.g. `us-east-1`), `AWS_DEPLOY_ROLE_ARN`
-     (from step 1), `TF_STATE_BUCKET`, `TF_LOCK_TABLE`,
-     `GRAFANA_NODEPORT_CIDR` (`0.0.0.0/0` or your IP `/32`),
-     `BUDGET_ALERT_EMAIL`, `MONTHLY_BUDGET_USD` (default `1`),
+3. **Docker Hub**: create an access token for pushing the app image.
+
+4. **Configure the repo** (Settings → Actions):
+   - **Variables**: `AWS_REGION`, `AWS_ROLE_ARN` (= `aws_role_arn`
+     output), `TF_STATE_BUCKET` (= `state_bucket_name`), `TF_LOCK_TABLE`
+     (= `lock_table_name`), `GRAFANA_NODEPORT_CIDR` (`0.0.0.0/0` or your
+     IP `/32`), `BUDGET_ALERT_EMAIL`, `MONTHLY_BUDGET_USD` (default `1`),
      `DOCKERHUB_USERNAME`.
+     (These aren't secret, so repo *Variables* are fine. If you'd rather
+     keep `AWS_ROLE_ARN` as a *Secret*, add it as one and change
+     `vars.AWS_ROLE_ARN` → `secrets.AWS_ROLE_ARN` in both workflows.)
    - **Environment `production`** (Settings → Environments → New):
      add secrets `DOCKERHUB_TOKEN` and `GRAFANA_ADMIN_PASSWORD`
      (a strong, unique password — this is the only Grafana admin
