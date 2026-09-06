@@ -206,6 +206,12 @@ jobs:
         run: |
           SCRIPT=$(cat <<'EOS'
           set -e
+          cloud-init status --wait || true
+          if ! command -v aws >/dev/null 2>&1; then
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y awscli
+          fi
           aws s3 sync "s3://__BUCKET__/k8s" /tmp/k8s --delete
           k3s kubectl apply -f /tmp/k8s/namespace.yaml
           k3s kubectl apply -R -f /tmp/k8s/monitoring -f /tmp/k8s/apps
