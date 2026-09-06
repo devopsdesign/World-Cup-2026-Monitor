@@ -1,0 +1,27 @@
+name: CI
+
+# Fast feedback on pull requests. Pushes to main run the same checks
+# inside deploy.yml's `test` job, which gates build/deploy.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run unit tests
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install --disable-pip-version-check -r src/app/requirements.txt pytest
+          pytest -q

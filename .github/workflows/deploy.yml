@@ -55,11 +55,29 @@ jobs:
         run: |
           echo "action=${DISPATCH_ACTION:-apply}" >> "$GITHUB_OUTPUT"
 
-  build:
+  test:
     needs: determine-action
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Run unit tests
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install --disable-pip-version-check -r src/app/requirements.txt pytest
+          pytest -q
+
+  build:
+    needs: [determine-action, test]
     if: needs.determine-action.outputs.action == 'apply'
     runs-on: ubuntu-latest
-    environment: production
+    # No `environment: production` here — the image push has no infra
+    # side effects, and gating both build and deploy on the protected
+    # environment would prompt for approval twice per run. The approval
+    # gate lives on `deploy` only.
     permissions:
       contents: read
       id-token: write
@@ -95,7 +113,7 @@ jobs:
           tags: ${{ steps.tag.outputs.image_tag }}
 
   deploy:
-    needs: [determine-action, build]
+    needs: [determine-action, test, build]
     if: always() && !failure() && !cancelled()
     runs-on: ubuntu-latest
     environment: production
@@ -228,6 +246,10 @@ jobs:
           fi
           aws s3 sync "s3://__BUCKET__/k8s" /tmp/k8s --delete
           k3s kubectl apply -f /tmp/k8s/namespace.yaml
+          # Remove the retired Prometheus RBAC (cluster-scoped: `apply` in
+          # a namespace dir won't prune it).
+          k3s kubectl delete clusterrole prometheus-cluster-role --ignore-not-found
+          k3s kubectl delete clusterrolebinding prometheus-cluster-role-binding --ignore-not-found
           k3s kubectl apply -R -f /tmp/k8s/monitoring -f /tmp/k8s/apps
           k3s kubectl -n world-cup-monitoring rollout status deployment/world-cup-web --timeout=180s
           k3s kubectl -n world-cup-monitoring rollout status deployment/prometheus --timeout=180s

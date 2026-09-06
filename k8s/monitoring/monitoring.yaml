@@ -22,7 +22,10 @@ spec:
           type: RuntimeDefault
       containers:
         - name: node-exporter
-          image: prom/node-exporter:v1.6.1
+          # Keep these third-party tags current — Dependabot does not
+          # parse k8s YAML. Verify the latest patch on Docker Hub before
+          # bumping; these are conservative known-good pins.
+          image: prom/node-exporter:v1.8.2
           args:
             - --path.procfs=/host/proc
             - --path.sysfs=/host/sys
@@ -114,7 +117,10 @@ spec:
       labels:
         app: prometheus
     spec:
-      automountServiceAccountToken: true # required: prometheus-rbac.yaml binds the "default" SA
+      # Scrape targets are all static_configs (no Kubernetes service
+      # discovery), so Prometheus never calls the API server — no
+      # ServiceAccount token, no RBAC.
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -123,7 +129,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: prometheus
-          image: prom/prometheus:v2.45.0
+          image: prom/prometheus:v2.53.2 # LTS; keep current (see node-exporter note)
           args:
             - "--config.file=/etc/prometheus/prometheus.yml"
             - "--storage.tsdb.path=/prometheus"
@@ -214,7 +220,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: grafana
-          image: grafana/grafana:10.0.0
+          image: grafana/grafana:10.4.14 # 10.4 LTS; keep current (see node-exporter note)
           ports:
             - containerPort: 3000
           env:
