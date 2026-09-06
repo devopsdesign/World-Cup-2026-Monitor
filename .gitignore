@@ -52,3 +52,7 @@ PERSONAL_NOTES.md
 PORTFOLIO_NARRATIVE.txt
 +.pdf
 *.dot
+
+# Python bytecode (any location)
+__pycache__/
+*.pyc
