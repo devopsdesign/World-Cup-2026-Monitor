@@ -26,7 +26,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from prometheus_client import CONTENT_TYPE_LATEST, Gauge, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("worldcup")
@@ -41,12 +41,21 @@ LIVE_MATCHES = Gauge("wc_live_matches_count", "Number of matches currently live"
 TOTAL_GOALS = Gauge("wc_total_goals_count", "Total goals scored in the tournament")
 MATCH_INTENSITY = Gauge("wc_live_match_intensity", "Live match action intensity index")
 UPSTREAM_ERRORS = Gauge("wc_upstream_errors_total", "Upstream API calls that failed since start")
+REFRESH_ATTEMPTS = Counter("wc_upstream_refresh_attempts_total", "Upstream refresh attempts")
+REFRESH_SUCCESSES = Counter("wc_upstream_refresh_successes_total", "Successful upstream refreshes")
+UPSTREAM_MATCHES = Gauge("wc_tournament_matches_count", "Matches returned by the tournament API")
+COMPLETED_MATCHES = Gauge("wc_completed_matches_count", "Completed matches in the tournament")
+LAST_REFRESH = Gauge("wc_last_successful_refresh_timestamp_seconds", "Unix timestamp of the last successful refresh")
+CACHE_AGE = Gauge("wc_cache_age_seconds", "Age of the cached live-match response in seconds")
+REFRESH_DURATION = Histogram("wc_upstream_refresh_duration_seconds", "Duration of an upstream refresh")
 
 _cache: dict[str, Any] = {"live": [], "updated_at": 0, "errors": 0}
 _cache_lock = asyncio.Lock()
 
 
 async def _refresh_once(client: httpx.AsyncClient) -> None:
+    REFRESH_ATTEMPTS.inc()
+    started_at = time.monotonic()
     try:
         live_res = await client.get(f"{UPSTREAM_BASE}/matches/current")
         live_data = live_res.json() if live_res.status_code == 200 else []
@@ -68,16 +77,25 @@ async def _refresh_once(client: httpx.AsyncClient) -> None:
                 for m in all_matches
                 if m.get("status") in ("completed", "in_progress")
             )
+            completed_matches = sum(1 for m in all_matches if m.get("status") == "completed")
+        else:
+            completed_matches = 0
 
         LIVE_MATCHES.set(len(live_data))
         TOTAL_GOALS.set(goals)
         MATCH_INTENSITY.set(intensity)
+        UPSTREAM_MATCHES.set(len(all_matches) if isinstance(all_matches, list) else 0)
+        COMPLETED_MATCHES.set(completed_matches)
+        REFRESH_SUCCESSES.inc()
+        LAST_REFRESH.set(time.time())
+        REFRESH_DURATION.observe(time.monotonic() - started_at)
 
         async with _cache_lock:
             _cache["live"] = live_data
             _cache["updated_at"] = time.time()
     except Exception as exc:  # noqa: BLE001 - one bad poll must never crash the loop
         UPSTREAM_ERRORS.inc()
+        REFRESH_DURATION.observe(time.monotonic() - started_at)
         async with _cache_lock:
             _cache["errors"] += 1
         log.warning("upstream refresh failed: %s", exc)
@@ -121,6 +139,9 @@ async def api_live() -> JSONResponse:
 
 @app.get("/metrics")
 async def metrics() -> PlainTextResponse:
+    async with _cache_lock:
+        updated_at = _cache["updated_at"]
+    CACHE_AGE.set(max(0, time.time() - updated_at) if updated_at else 0)
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
