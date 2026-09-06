@@ -4,7 +4,7 @@
 #   docker pull python:3.11.9-slim
 #   docker inspect --format='{{index .RepoDigests 0}}' python:3.11.9-slim
 #   # then: FROM python:3.11.9-slim@sha256:<the digest printed above>
-FROM python:3.11.9-slim AS base
+FROM python:3.14.7-slim AS base
 
 RUN groupadd --gid 10001 app && \
     useradd --uid 10001 --gid app --shell /usr/sbin/nologin --no-create-home app
