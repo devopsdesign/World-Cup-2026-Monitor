@@ -266,6 +266,10 @@ resource "aws_instance" "k3s_server" {
     swapon /swapfile
     echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y awscli
+
     # SSM agent ships pre-installed on Ubuntu 22.04's official AMIs; make
     # sure it's enabled so Session Manager / Run Command work immediately.
     snap start amazon-ssm-agent || systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || true
