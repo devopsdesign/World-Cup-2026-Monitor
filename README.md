@@ -122,22 +122,25 @@ access, if you ever need it, goes through **SSM Session Manager**.
    (`infra/backend.hcl` is gitignored — it holds your account ID. CI
    passes the same values via `-backend-config` flags instead.)
 
-3. **Docker Hub**: create an access token for pushing the app image.
-
-4. **Configure the repo** (Settings → Actions):
+3. **Configure the repo** (Settings → Actions):
    - **Variables**: `AWS_REGION`, `AWS_ROLE_ARN` (= `aws_role_arn`
      output), `TF_STATE_BUCKET` (= `state_bucket_name`), `TF_LOCK_TABLE`
      (= `lock_table_name`), `GRAFANA_NODEPORT_CIDR` (`0.0.0.0/0` or your
      IP `/32`), `BUDGET_ALERT_EMAIL`, `MONTHLY_BUDGET_USD` (default `1`),
-     `DOCKERHUB_USERNAME`.
-     (These aren't secret, so repo *Variables* are fine. If you'd rather
-     keep `AWS_ROLE_ARN` as a *Secret*, add it as one and change
+       (These aren't secret, so repo *Variables* are fine. If you'd rather
+       keep `AWS_ROLE_ARN` as a *Secret*, add it as one and change
      `vars.AWS_ROLE_ARN` → `secrets.AWS_ROLE_ARN` in both workflows.)
    - **Environment `production`** (Settings → Environments → New):
-     add secrets `DOCKERHUB_TOKEN` and `GRAFANA_ADMIN_PASSWORD`
-     (a strong, unique password — this is the only Grafana admin
-     credential that will ever exist), and add **required reviewers**
+       add the secret `GRAFANA_ADMIN_PASSWORD` (a strong, unique password
+       — this is the only Grafana admin credential that will ever exist),
+       and add **required reviewers**
      so `apply`/`destroy` need a human approval.
+
+    The workflow publishes the app image to GitHub Container Registry
+    (`ghcr.io`) using the built-in `GITHUB_TOKEN`; no Docker Hub account
+    or local Docker installation is required. After the first successful
+    build, set the new GHCR package visibility to **Public** so the K3s
+    node can pull it without registry credentials.
 
 ---
 
