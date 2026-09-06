@@ -108,16 +108,38 @@ async function refresh() {
 }
 
 async function refreshTotals() {
-  // /metrics is the Prometheus exposition format; parse just the two
-  // gauges we care about for the header stat card without adding a
-  // second JSON endpoint.
   try {
     const res = await fetch("/metrics", { cache: "no-store" });
     if (!res.ok) return;
     const text = await res.text();
-    const match = text.match(/^wc_total_goals_count\s+([\d.]+)/m);
-    if (match) {
-      document.getElementById("statGoals").textContent = Math.round(parseFloat(match[1]));
+    const readMetric = (name) => {
+      const match = text.match(new RegExp(`^${name}\\s+([\\d.]+)`, "m"));
+      return match ? parseFloat(match[1]) : null;
+    };
+
+    const liveMatches = readMetric("wc_live_matches_count");
+    const totalGoals = readMetric("wc_total_goals_count");
+    const totalMatches = readMetric("wc_tournament_matches_count");
+    const completed = readMetric("wc_completed_matches_count");
+    const avgGoals = readMetric("wc_average_goals_per_match");
+    const highScoring = readMetric("wc_high_scoring_matches_count");
+    const margin = readMetric("wc_largest_margin_of_victory_goals");
+    const intensity = readMetric("wc_live_match_intensity");
+    const errors = readMetric("wc_upstream_errors_total");
+    const lastTs = readMetric("wc_last_successful_refresh_timestamp_seconds");
+
+    if (liveMatches !== null) document.getElementById("statLive").textContent = Math.round(liveMatches);
+    if (totalGoals !== null) document.getElementById("statGoals").textContent = Math.round(totalGoals);
+    if (totalMatches !== null) document.getElementById("statMatches").textContent = Math.round(totalMatches);
+    if (completed !== null) document.getElementById("statCompleted").textContent = Math.round(completed);
+    if (avgGoals !== null) document.getElementById("statAvgGoals").textContent = avgGoals.toFixed(1);
+    if (highScoring !== null) document.getElementById("statHighScoring").textContent = Math.round(highScoring);
+    if (margin !== null) document.getElementById("statMargin").textContent = Math.round(margin);
+    if (intensity !== null) document.getElementById("statIntensity").textContent = Math.round(intensity);
+    if (errors !== null) document.getElementById("statErrors").textContent = Math.round(errors);
+    if (lastTs !== null) {
+      const date = new Date(lastTs * 1000);
+      document.getElementById("statUpdated").textContent = date.toLocaleTimeString();
     }
   } catch (_) {
     /* non-critical */

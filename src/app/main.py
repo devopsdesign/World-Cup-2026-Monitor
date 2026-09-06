@@ -45,12 +45,67 @@ REFRESH_ATTEMPTS = Counter("wc_upstream_refresh_attempts_total", "Upstream refre
 REFRESH_SUCCESSES = Counter("wc_upstream_refresh_successes_total", "Successful upstream refreshes")
 UPSTREAM_MATCHES = Gauge("wc_tournament_matches_count", "Matches returned by the tournament API")
 COMPLETED_MATCHES = Gauge("wc_completed_matches_count", "Completed matches in the tournament")
+AVG_GOALS_PER_MATCH = Gauge("wc_average_goals_per_match", "Average goals across tournament matches")
+HIGH_SCORING_MATCHES = Gauge("wc_high_scoring_matches_count", "Matches with four or more goals")
+MAX_WIN_MARGIN = Gauge("wc_largest_margin_of_victory_goals", "Largest winning margin in the tournament")
 LAST_REFRESH = Gauge("wc_last_successful_refresh_timestamp_seconds", "Unix timestamp of the last successful refresh")
 CACHE_AGE = Gauge("wc_cache_age_seconds", "Age of the cached live-match response in seconds")
 REFRESH_DURATION = Histogram("wc_upstream_refresh_duration_seconds", "Duration of an upstream refresh")
 
 _cache: dict[str, Any] = {"live": [], "updated_at": 0, "errors": 0}
 _cache_lock = asyncio.Lock()
+
+
+def _register_default_metrics() -> None:
+    LIVE_MATCHES.set(0.0)
+    TOTAL_GOALS.set(0.0)
+    MATCH_INTENSITY.set(0.0)
+    UPSTREAM_ERRORS.set(0.0)
+    UPSTREAM_MATCHES.set(0.0)
+    COMPLETED_MATCHES.set(0.0)
+    AVG_GOALS_PER_MATCH.set(0.0)
+    HIGH_SCORING_MATCHES.set(0.0)
+    MAX_WIN_MARGIN.set(0.0)
+    LAST_REFRESH.set(0.0)
+    CACHE_AGE.set(0.0)
+
+
+_register_default_metrics()
+
+
+def _compute_summary(live_matches: list[dict[str, Any]], all_matches: list[dict[str, Any]]) -> dict[str, float]:
+    total_matches = len(all_matches) if isinstance(all_matches, list) else 0
+    completed_matches = sum(1 for m in all_matches if (m or {}).get("status") == "completed") if isinstance(all_matches, list) else 0
+
+    total_goals = 0
+    high_scoring_matches = 0
+    largest_margin = 0
+
+    if isinstance(all_matches, list):
+        for match in all_matches:
+            if not isinstance(match, dict):
+                continue
+            home_goals = int((match.get("home_team") or {}).get("goals") or 0)
+            away_goals = int((match.get("away_team") or {}).get("goals") or 0)
+            total_goals += home_goals + away_goals
+            if home_goals + away_goals >= 4:
+                high_scoring_matches += 1
+            margin = abs(home_goals - away_goals)
+            if margin > largest_margin:
+                largest_margin = margin
+
+    live_count = len(live_matches) if isinstance(live_matches, list) else 0
+    avg_goals = (total_goals / total_matches) if total_matches else 0.0
+
+    return {
+        "live_matches": float(live_count),
+        "total_matches": float(total_matches),
+        "completed_matches": float(completed_matches),
+        "total_goals": float(total_goals),
+        "average_goals_per_match": float(avg_goals),
+        "high_scoring_matches": float(high_scoring_matches),
+        "largest_margin_of_victory": float(largest_margin),
+    }
 
 
 async def _refresh_once(client: httpx.AsyncClient) -> None:
@@ -69,23 +124,16 @@ async def _refresh_once(client: httpx.AsyncClient) -> None:
 
         all_res = await client.get(f"{UPSTREAM_BASE}/matches")
         all_matches = all_res.json() if all_res.status_code == 200 else []
-        goals = 0
-        if isinstance(all_matches, list):
-            goals = sum(
-                ((m.get("home_team", {}) or {}).get("goals", 0) or 0)
-                + ((m.get("away_team", {}) or {}).get("goals", 0) or 0)
-                for m in all_matches
-                if m.get("status") in ("completed", "in_progress")
-            )
-            completed_matches = sum(1 for m in all_matches if m.get("status") == "completed")
-        else:
-            completed_matches = 0
+        summary = _compute_summary(live_data, all_matches if isinstance(all_matches, list) else [])
 
-        LIVE_MATCHES.set(len(live_data))
-        TOTAL_GOALS.set(goals)
+        LIVE_MATCHES.set(summary["live_matches"])
+        TOTAL_GOALS.set(summary["total_goals"])
         MATCH_INTENSITY.set(intensity)
-        UPSTREAM_MATCHES.set(len(all_matches) if isinstance(all_matches, list) else 0)
-        COMPLETED_MATCHES.set(completed_matches)
+        UPSTREAM_MATCHES.set(summary["total_matches"])
+        COMPLETED_MATCHES.set(summary["completed_matches"])
+        AVG_GOALS_PER_MATCH.set(summary["average_goals_per_match"])
+        HIGH_SCORING_MATCHES.set(summary["high_scoring_matches"])
+        MAX_WIN_MARGIN.set(summary["largest_margin_of_victory"])
         REFRESH_SUCCESSES.inc()
         LAST_REFRESH.set(time.time())
         REFRESH_DURATION.observe(time.monotonic() - started_at)
@@ -141,6 +189,7 @@ async def api_live() -> JSONResponse:
 async def metrics() -> PlainTextResponse:
     async with _cache_lock:
         updated_at = _cache["updated_at"]
+    _register_default_metrics()
     CACHE_AGE.set(max(0, time.time() - updated_at) if updated_at else 0)
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
