@@ -52,7 +52,7 @@ LAST_REFRESH = Gauge("wc_last_successful_refresh_timestamp_seconds", "Unix times
 CACHE_AGE = Gauge("wc_cache_age_seconds", "Age of the cached live-match response in seconds")
 REFRESH_DURATION = Histogram("wc_upstream_refresh_duration_seconds", "Duration of an upstream refresh")
 
-_cache: dict[str, Any] = {"live": [], "updated_at": 0, "errors": 0}
+_cache: dict[str, Any] = {"live": [], "stats": {}, "updated_at": 0, "errors": 0}
 _cache_lock = asyncio.Lock()
 
 
@@ -135,17 +135,29 @@ async def _refresh_once(client: httpx.AsyncClient) -> None:
         HIGH_SCORING_MATCHES.set(summary["high_scoring_matches"])
         MAX_WIN_MARGIN.set(summary["largest_margin_of_victory"])
         REFRESH_SUCCESSES.inc()
-        LAST_REFRESH.set(time.time())
+        refreshed_at = time.time()
+        LAST_REFRESH.set(refreshed_at)
         REFRESH_DURATION.observe(time.monotonic() - started_at)
 
         async with _cache_lock:
             _cache["live"] = live_data
-            _cache["updated_at"] = time.time()
+            _cache["updated_at"] = refreshed_at
+            # Everything the 10 frontend tiles need, in one JSON payload —
+            # the browser reads this from /api/live and never scrapes the
+            # Prometheus exposition format itself.
+            _cache["stats"] = {
+                **summary,
+                "match_intensity": intensity,
+                "upstream_errors": _cache["errors"],
+                "last_refresh": refreshed_at,
+            }
     except Exception as exc:  # noqa: BLE001 - one bad poll must never crash the loop
         UPSTREAM_ERRORS.inc()
         REFRESH_DURATION.observe(time.monotonic() - started_at)
         async with _cache_lock:
             _cache["errors"] += 1
+            if _cache["stats"]:
+                _cache["stats"]["upstream_errors"] = _cache["errors"]
         log.warning("upstream refresh failed: %s", exc)
 
 
@@ -179,6 +191,7 @@ async def api_live() -> JSONResponse:
         return JSONResponse(
             {
                 "matches": _cache["live"],
+                "stats": _cache["stats"],
                 "updated_at": _cache["updated_at"],
                 "upstream_errors": _cache["errors"],
             }
@@ -187,10 +200,13 @@ async def api_live() -> JSONResponse:
 
 @app.get("/metrics")
 async def metrics() -> PlainTextResponse:
+    # Only derived, request-time values are set here. The tournament
+    # gauges are owned exclusively by _refresh_once() — resetting them on
+    # every scrape (as an earlier version did) blanked the dashboard and
+    # the frontend tiles between refreshes.
     async with _cache_lock:
         updated_at = _cache["updated_at"]
-    _register_default_metrics()
-    CACHE_AGE.set(max(0, time.time() - updated_at) if updated_at else 0)
+    CACHE_AGE.set(max(0.0, time.time() - updated_at) if updated_at else 0.0)
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

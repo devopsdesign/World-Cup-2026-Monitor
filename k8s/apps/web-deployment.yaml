@@ -91,23 +91,9 @@ spec:
       targetPort: 8080
       nodePort: 30080
       protocol: TCP
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: world-cup-web-hpa
-  namespace: world-cup-monitoring
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: world-cup-web
-  minReplicas: 1
-  maxReplicas: 3
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 75
+# No HorizontalPodAutoscaler: the K3s node is installed with
+# `--disable=metrics-server` (infra/main.tf) to save memory on the
+# t3.micro, so an HPA would sit permanently at `<unknown>/target` and
+# never scale. To enable autoscaling, drop `--disable=metrics-server`
+# from the user-data k3s install line and re-add an autoscaling/v2 HPA
+# here.

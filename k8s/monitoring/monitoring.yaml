@@ -171,6 +171,25 @@ spec:
       targetPort: 9090
   type: ClusterIP # no NodePort: reach it via an SSM port-forward tunnel, never the internet
 ---
+# Provisions the Prometheus data source at startup with a fixed uid, so
+# the imported dashboard's panels resolve without any manual setup.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: world-cup-monitoring
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-service:9090
+        isDefault: true
+        editable: false
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -232,11 +251,17 @@ spec:
               mountPath: /var/lib/grafana
             - name: tmp
               mountPath: /tmp
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
       volumes:
         - name: grafana-storage
           emptyDir: {}
         - name: tmp
           emptyDir: {}
+        - name: grafana-datasources
+          configMap:
+            name: grafana-datasources
 ---
 apiVersion: v1
 kind: Service

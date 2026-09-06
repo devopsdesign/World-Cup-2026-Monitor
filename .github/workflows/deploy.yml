@@ -189,6 +189,12 @@ jobs:
 
           sed -i "s|IMAGE_PLACEHOLDER|${IMAGE_TAG}|g" rendered/apps/web-deployment.yaml
 
+          # Dashboards + the import script travel to the node with the
+          # manifests, so Grafana is provisioned over loopback and never
+          # has to be reachable from this runner or the internet.
+          cp scripts/import-dashboards.sh rendered/
+          cp -r docs/dashboards rendered/dashboards
+
           # Generated at deploy time from the GitHub Actions secret — this
           # file is never committed to git and never printed.
           kubectl create secret generic grafana-admin-credentials \
@@ -212,10 +218,13 @@ jobs:
           SCRIPT=$(cat <<'EOS'
           set -e
           cloud-init status --wait || true
-          if ! command -v aws >/dev/null 2>&1; then
-            export DEBIAN_FRONTEND=noninteractive
+          export DEBIAN_FRONTEND=noninteractive
+          MISSING=""
+          command -v aws >/dev/null 2>&1 || MISSING="$MISSING awscli"
+          command -v jq  >/dev/null 2>&1 || MISSING="$MISSING jq"
+          if [ -n "$MISSING" ]; then
             apt-get update
-            apt-get install -y awscli
+            apt-get install -y $MISSING
           fi
           aws s3 sync "s3://__BUCKET__/k8s" /tmp/k8s --delete
           k3s kubectl apply -f /tmp/k8s/namespace.yaml
@@ -223,6 +232,8 @@ jobs:
           k3s kubectl -n world-cup-monitoring rollout status deployment/world-cup-web --timeout=180s
           k3s kubectl -n world-cup-monitoring rollout status deployment/prometheus --timeout=180s
           k3s kubectl -n world-cup-monitoring rollout status deployment/grafana --timeout=180s
+          chmod +x /tmp/k8s/import-dashboards.sh
+          /tmp/k8s/import-dashboards.sh
           EOS
           )
           SCRIPT="${SCRIPT//__BUCKET__/$MANIFEST_BUCKET}"
@@ -261,14 +272,9 @@ jobs:
           echo "SSM command did not finish in time." >&2
           exit 1
 
-      - name: Import Grafana dashboards
-        if: env.TF_ACTION == 'apply'
-        env:
-          GRAFANA_URL: http://${{ steps.tf.outputs.public_ip }}:30030
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-        run: |
-          chmod +x scripts/import-dashboards.sh
-          ./scripts/import-dashboards.sh
+      # Grafana dashboards are imported inside the SSM Run Command step
+      # above (over the node's loopback interface), so there is no
+      # internet-facing Grafana call from this runner.
 
       - name: Deployment summary
         if: success() && env.TF_ACTION == 'apply'

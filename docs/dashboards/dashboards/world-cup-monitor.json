@@ -1,130 +1,224 @@
 {
   "dashboard": {
+    "uid": "world-cup-2026",
     "title": "World Cup 2026 Monitor",
-    "uid": "world-cup-ecom",
-    "tags": ["kubernetes", "e-commerce", "fifa-2026"],
+    "tags": ["world-cup", "fifa-2026", "k3s"],
     "timezone": "browser",
+    "refresh": "30s",
+    "schemaVersion": 39,
+    "time": { "from": "now-3h", "to": "now" },
     "panels": [
       {
         "id": 1,
-        "title": "Cluster CPU Usage",
+        "title": "Node CPU Usage",
         "type": "gauge",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
         "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 },
-        "targets": [
-          {
-            "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-            "legendFormat": "CPU %"
-          }
-        ],
         "fieldConfig": {
           "defaults": {
-            "max": 100,
+            "unit": "percent",
             "min": 0,
+            "max": 100,
             "thresholds": {
+              "mode": "absolute",
               "steps": [
                 { "color": "green", "value": null },
                 { "color": "yellow", "value": 70 },
                 { "color": "red", "value": 85 }
               ]
-            },
-            "unit": "percent"
+            }
           }
-        }
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "legendFormat": "CPU %"
+          }
+        ]
       },
       {
         "id": 2,
-        "title": "Pod Count (Scaling Live)",
-        "type": "stat",
+        "title": "Node Memory Used",
+        "type": "gauge",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
         "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 75 },
+                { "color": "red", "value": 90 }
+              ]
+            }
+          }
+        },
         "targets": [
           {
-            "expr": "count(kube_pod_info{namespace=\"world-cup-monitoring\"})",
-            "legendFormat": "Running Pods"
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))",
+            "legendFormat": "Memory %"
           }
         ]
       },
       {
         "id": 3,
-        "title": "App CPU Usage (Per Pod)",
+        "title": "world-cup-web CPU & Memory",
         "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
         "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
         "targets": [
           {
-            "expr": "rate(container_cpu_usage_seconds_total{namespace=\"world-cup-monitoring\", pod=~\"world-cup-app.*\"}[5m]) * 100",
-            "legendFormat": "{{pod}}"
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "rate(process_cpu_seconds_total{job=\"world-cup-web\"}[5m])",
+            "legendFormat": "CPU cores"
+          },
+          {
+            "refId": "B",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "process_resident_memory_bytes{job=\"world-cup-web\"} / 1024 / 1024",
+            "legendFormat": "RSS MiB"
           }
         ]
       },
       {
         "id": 4,
-        "title": "HPA Current vs Desired Replicas",
-        "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+        "title": "Live Matches",
+        "type": "stat",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "h": 6, "w": 4, "x": 0, "y": 8 },
+        "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "cyan" } } },
         "targets": [
           {
-            "expr": "kube_hpa_status_current_replicas{hpa=\"world-cup-hpa\"}",
-            "legendFormat": "Current Replicas"
-          },
-          {
-            "expr": "kube_hpa_status_desired_replicas{hpa=\"world-cup-hpa\"}",
-            "legendFormat": "Desired Replicas"
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_live_matches_count"
           }
         ]
       },
       {
         "id": 5,
-        "title": "⚽ Live World Cup Matches",
+        "title": "Tournament Goals",
         "type": "stat",
-        "gridPos": { "h": 8, "w": 4, "x": 0, "y": 16 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "h": 6, "w": 4, "x": 4, "y": 8 },
+        "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "green" } } },
         "targets": [
           {
-            "expr": "wc_live_matches_count",
-            "legendFormat": "Active Matches"
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_total_goals_count"
           }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "fixed",
-              "fixedColor": "cyan"
-            }
-          }
-        }
+        ]
       },
       {
         "id": 6,
-        "title": "🏆 Total Tournament Goals",
+        "title": "Completed Matches",
         "type": "stat",
-        "gridPos": { "h": 8, "w": 4, "x": 4, "y": 16 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "h": 6, "w": 4, "x": 8, "y": 8 },
         "targets": [
           {
-            "expr": "wc_total_goals_count",
-            "legendFormat": "Goals Scored"
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_completed_matches_count"
           }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "fixed",
-              "fixedColor": "green"
-            }
-          }
-        }
+        ]
       },
       {
         "id": 7,
-        "title": "🔥 Live Match Action Intensity Index",
-        "type": "timeseries",
-        "gridPos": { "h": 8, "w": 16, "x": 8, "y": 16 },
+        "title": "Avg Goals / Match",
+        "type": "stat",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "h": 6, "w": 4, "x": 12, "y": 8 },
+        "fieldConfig": { "defaults": { "decimals": 2 } },
         "targets": [
           {
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_average_goals_per_match"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "High-Scoring Matches (4+ goals)",
+        "type": "stat",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "h": 6, "w": 4, "x": 16, "y": 8 },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_high_scoring_matches_count"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Largest Margin of Victory",
+        "type": "stat",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "h": 6, "w": 4, "x": 20, "y": 8 },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_largest_margin_of_victory_goals"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Live Match Intensity Index",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
             "expr": "wc_live_match_intensity",
-            "legendFormat": "Live Match Activity"
+            "legendFormat": "intensity"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Upstream Refresh Health",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "rate(wc_upstream_refresh_successes_total[5m])",
+            "legendFormat": "successful refreshes/s"
+          },
+          {
+            "refId": "B",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_upstream_errors_total",
+            "legendFormat": "cumulative upstream errors"
+          },
+          {
+            "refId": "C",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_cache_age_seconds",
+            "legendFormat": "cache age (s)"
           }
         ]
       }
-    ],
-    "refresh": "15s"
+    ]
   },
   "overwrite": true
 }

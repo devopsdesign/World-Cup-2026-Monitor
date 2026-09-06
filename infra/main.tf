@@ -268,7 +268,7 @@ resource "aws_instance" "k3s_server" {
 
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
-    apt-get install -y awscli
+    apt-get install -y awscli jq
 
     # SSM agent ships pre-installed on Ubuntu 22.04's official AMIs; make
     # sure it's enabled so Session Manager / Run Command work immediately.
