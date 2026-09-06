@@ -323,6 +323,21 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     resources = ["arn:aws:budgets::${local.account_id}:budget/${var.project_name}-*"]
   }
 
+  # --- ECR Public: push this project's public image ---
+  statement {
+    sid    = "ProjectEcrPublicPush"
+    effect = "Allow"
+    actions = [
+      "ecr-public:GetAuthorizationToken",
+      "ecr-public:BatchCheckLayerAvailability",
+      "ecr-public:InitiateLayerUpload",
+      "ecr-public:UploadLayerPart",
+      "ecr-public:CompleteLayerUpload",
+      "ecr-public:PutImage",
+    ]
+    resources = ["*"]
+  }
+
   # --- SSM: read command/instance state (no resource-level support) ---
   statement {
     sid    = "SsmReadState"

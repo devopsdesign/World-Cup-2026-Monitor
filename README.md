@@ -136,11 +136,11 @@ access, if you ever need it, goes through **SSM Session Manager**.
        and add **required reviewers**
      so `apply`/`destroy` need a human approval.
 
-    The workflow publishes the app image to GitHub Container Registry
-    (`ghcr.io`) using the built-in `GITHUB_TOKEN`; no Docker Hub account
-    or local Docker installation is required. After the first successful
-    build, set the new GHCR package visibility to **Public** so the K3s
-    node can pull it without registry credentials.
+   The workflow publishes the app image to ECR Public using the GitHub
+   OIDC role. Set `ECR_PUBLIC_ALIAS` to the registry alias returned by
+   `aws ecr-public describe-registries`. The repository must be public so
+   the K3s node can pull it without registry credentials. No local Docker
+   installation is required.
 
 ---
 
