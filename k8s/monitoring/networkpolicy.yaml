@@ -1,0 +1,129 @@
+# Default-deny for the namespace, then explicit allows for the traffic
+# the stack actually needs. NodePort traffic arrives via kube-proxy on
+# the node, which NetworkPolicy egress/ingress rules below still permit
+# since it's evaluated as ingress from "anywhere" (podSelector: {}) —
+# only pod-to-pod traffic inside the cluster is restricted here.
+#
+# IMPORTANT: K3s's default CNI (Flannel) does not enforce NetworkPolicy
+# at all — these objects will apply cleanly but silently do nothing
+# unless the cluster runs a policy-capable CNI. To actually enforce
+# them, install k3s with `--flannel-backend=none --disable-network-policy`
+# and add Calico (or another NetworkPolicy-capable CNI) afterwards.
+# Left in place here as defense-in-depth / documentation of intent.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: world-cup-monitoring
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+# DNS must always be allowed or every other policy breaks name resolution.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: world-cup-monitoring
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# world-cup-web: accepts NodePort ingress (kube-proxy delivers it as
+# ingress with no matching podSelector on the source, i.e. "anywhere"),
+# and needs egress to the internet (worldcupjson.net) plus DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-allow
+  namespace: world-cup-monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: world-cup-web
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from: [] # NodePort (30080) traffic reaches the pod as unmatched ingress
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+---
+# Prometheus: scrape node-exporter + the web app, accept queries only
+# from Grafana (no NodePort — it's ClusterIP-only).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow
+  namespace: world-cup-monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: grafana
+      ports:
+        - protocol: TCP
+          port: 9090
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: node-exporter
+      ports:
+        - protocol: TCP
+          port: 9100
+    - to:
+        - podSelector:
+            matchLabels:
+              app: world-cup-web
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Grafana: served on NodePort 30030, reads from Prometheus only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-allow
+  namespace: world-cup-monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: grafana
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from: [] # NodePort (30030) traffic
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
