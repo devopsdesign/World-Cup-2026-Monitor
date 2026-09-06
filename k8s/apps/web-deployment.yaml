@@ -6,7 +6,7 @@
 # keeps the t3.micro's footprint small and removes the supply-chain
 # risk of installing packages from PyPI on every pod start.
 #
-# IMAGE_PLACEHOLDER is substituted by CI with a GHCR tag pinned
+# IMAGE_PLACEHOLDER is substituted by CI with an ECR Public tag pinned
 # to the git commit SHA that was actually built and pushed — never
 # `:latest`.
 apiVersion: apps/v1
