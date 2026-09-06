@@ -156,7 +156,7 @@ jobs:
           INSTANCE_ID: ${{ steps.tf.outputs.instance_id }}
         run: |
           echo "Waiting for SSM agent on $INSTANCE_ID..."
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             STATUS=$(aws ssm describe-instance-information \
               --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
               --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null || echo "")
@@ -164,7 +164,7 @@ jobs:
               echo "SSM agent online."
               exit 0
             fi
-            echo "Attempt $i/30: SSM status='$STATUS'. Waiting 10s..."
+            echo "Attempt $i/60: SSM status='$STATUS'. Waiting 10s..."
             sleep 10
           done
           echo "SSM agent never came online." >&2
@@ -227,15 +227,16 @@ jobs:
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "world-cup-monitor deploy $GITHUB_SHA" \
+            --timeout-seconds 900 \
             --parameters "$PAYLOAD" \
             --query 'Command.CommandId' --output text)
 
           echo "SSM command: $CMD_ID"
-          for i in $(seq 1 30); do
+          for i in $(seq 1 90); do
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
               --query 'Status' --output text 2>/dev/null || echo "Pending")
-            echo "Attempt $i/30: status=$STATUS"
+            echo "Attempt $i/90: status=$STATUS"
             if [ "$STATUS" = "Success" ]; then
               aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
                 --query 'StandardOutputContent' --output text
