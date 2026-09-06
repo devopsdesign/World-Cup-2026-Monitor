@@ -319,7 +319,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   statement {
     sid       = "ProjectBudget"
     effect    = "Allow"
-    actions   = ["budgets:ViewBudget", "budgets:ModifyBudget"]
+    actions   = ["budgets:ViewBudget", "budgets:ModifyBudget", "budgets:ListTagsForResource"]
     resources = ["arn:aws:budgets::${local.account_id}:budget/${var.project_name}-*"]
   }
 
