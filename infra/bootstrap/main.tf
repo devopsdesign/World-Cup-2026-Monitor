@@ -6,7 +6,6 @@
 # depend on:
 #   * KMS CMK + S3 bucket for Terraform state (SSE-KMS, versioned,
 #     public access blocked, TLS-only + KMS-only bucket policy)
-#   * DynamoDB table for state locking (PAY_PER_REQUEST)
 #   * GitHub Actions OIDC provider
 #   * an IAM role GitHub Actions assumes via OIDC, scoped to this repo,
 #     with least-privilege permissions (no static access keys anywhere)
@@ -374,7 +373,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   statement {
     sid       = "CallerIdentity"
     effect    = "Allow"
-    actions   = ["sts:GetCallerIdentity"]
+    actions   = ["sts:GetCallerIdentity", "sts:GetServiceBearerToken"]
     resources = ["*"]
   }
 }
