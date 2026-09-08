@@ -259,3 +259,82 @@ footer code {
   padding: 0.1rem 0.4rem;
   border-radius: 4px;
 }
+
+/* --- tournament recap additions --- */
+
+.stat-card--headline {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(244, 197, 66, 0.25), 0 0 24px rgba(244, 197, 66, 0.12);
+}
+
+.scorer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.scorer {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(6rem, 12rem) 1fr 2rem;
+  align-items: center;
+  gap: 0.7rem;
+  background: rgba(14, 31, 24, 0.9);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 0.5rem 0.8rem;
+}
+
+.scorer-rank {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.scorer-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.scorer-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.scorer-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--pitch-green), var(--gold));
+}
+
+.scorer-goals {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--gold);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.round-group { margin-bottom: 1.8rem; }
+
+.round-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 0.8rem;
+}
+
+.ko-card .match-meta { color: var(--text-dim); }
+
+.team--winner .team-name { color: var(--gold); }
+
+@media (max-width: 520px) {
+  .scorer { grid-template-columns: 1.4rem 1fr 2rem; }
+  .scorer-bar { display: none; }
+}

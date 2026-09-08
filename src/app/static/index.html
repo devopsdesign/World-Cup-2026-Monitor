@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>World Cup 2026 Monitor</title>
+  <title>World Cup 2026 Recap</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -18,69 +18,76 @@
       <span class="brand-text">WORLD CUP <strong>2026</strong> MONITOR</span>
     </div>
     <div class="status-pill" id="connStatus">
-      <span class="dot"></span> <span id="connStatusText">connecting…</span>
+      <span class="dot"></span> <span id="connStatusText">loading…</span>
     </div>
   </header>
 
   <main>
     <section class="hero">
-      <h1>Match Day Control Room</h1>
-      <p>Live scores, match intensity, and tournament totals — pulled from the tournament feed every 30s, view refreshes every 15s.</p>
+      <h1>World Cup 2026 — Tournament Recap</h1>
+      <p id="heroSub">The record book from all 104 matches across Canada, Mexico and the United States.</p>
     </section>
 
-    <section class="stat-row" aria-label="Tournament totals">
-      <div class="stat-card">
-        <div class="stat-label">Live Matches</div>
-        <div class="stat-value" id="statLive">–</div>
+    <section class="stat-row" aria-label="Tournament records">
+      <div class="stat-card stat-card--headline">
+        <div class="stat-label">Champion</div>
+        <div class="stat-value stat-value--small" id="statChampion">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Tournament Goals</div>
-        <div class="stat-value" id="statGoals">–</div>
+        <div class="stat-label">Runner-Up</div>
+        <div class="stat-value stat-value--small" id="statRunnerUp">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Total Matches</div>
+        <div class="stat-label">Golden Boot</div>
+        <div class="stat-value stat-value--small" id="statGoldenBoot">–</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Matches Played</div>
         <div class="stat-value" id="statMatches">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Completed</div>
-        <div class="stat-value" id="statCompleted">–</div>
+        <div class="stat-label">Total Goals</div>
+        <div class="stat-value" id="statGoals">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Avg Goals / Match</div>
-        <div class="stat-value" id="statAvgGoals">–</div>
+        <div class="stat-label">Goals / Match</div>
+        <div class="stat-value" id="statAvg">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">High Scoring</div>
-        <div class="stat-value" id="statHighScoring">–</div>
+        <div class="stat-label">Biggest Win</div>
+        <div class="stat-value stat-value--small" id="statBiggestWin">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Largest Margin</div>
-        <div class="stat-value" id="statMargin">–</div>
+        <div class="stat-label">Most Goals, 1 Match</div>
+        <div class="stat-value" id="statHighest">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Match Intensity</div>
-        <div class="stat-value" id="statIntensity">–</div>
+        <div class="stat-label">Hat-Tricks</div>
+        <div class="stat-value" id="statHatTricks">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Upstream Errors</div>
-        <div class="stat-value" id="statErrors">–</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Last Update</div>
-        <div class="stat-value stat-value--small" id="statUpdated">–</div>
+        <div class="stat-label">Shootouts</div>
+        <div class="stat-value" id="statShootouts">–</div>
       </div>
     </section>
 
     <section class="pitch">
-      <h2>Live Scoreboards</h2>
-      <div id="matchGrid" class="match-grid">
-        <p class="empty-state" id="emptyState">No live matches right now — check back on match day.</p>
+      <h2>Golden Boot Race</h2>
+      <ol id="scorerList" class="scorer-list">
+        <li class="empty-state">Loading scorers…</li>
+      </ol>
+    </section>
+
+    <section class="pitch">
+      <h2>Road to the Final</h2>
+      <div id="knockoutRounds">
+        <p class="empty-state">Loading knockout results…</p>
       </div>
     </section>
   </main>
 
   <footer>
-    <p>Metrics: <code>/metrics</code> · API: <code>/api/live</code> · Data via worldcupjson.net</p>
+    <p>Metrics: <code>/metrics</code> · API: <code>/api/tournament</code> · Data: <code>openfootball/worldcup.json</code></p>
   </footer>
 
   <script src="/js/app.js"></script>

@@ -13,11 +13,11 @@ A real-time, cloud-native monitoring platform for the 2026 FIFA World Cup — a 
 ## Architecture
 
 ```text
- ┌──────────────────┐        ┌───────────────────────────┐
- │  worldcupjson.net │◄──────┤  world-cup-web (FastAPI)  │
- └──────────────────┘        │  frontend + /api/live      │
-                              │  + /metrics                │
-                              └──────────────┬─────────────┘
+ ┌───────────────────────────┐   ┌───────────────────────────┐
+ │ openfootball/worldcup.json │◄──┤  world-cup-web (FastAPI)  │
+ │ (static 2026 results JSON) │   │  frontend + /api/tournament│
+ └───────────────────────────┘   │  + /metrics                │
+                                  └──────────────┬─────────────┘
                                               │ scraped by
                                               ▼
                                      ┌────────────────┐        ┌──────────┐
@@ -40,7 +40,7 @@ access, if you ever need it, goes through **SSM Session Manager**.
 
 | Exposed publicly | Port | What |
 |---|---|---|
-| ✅ | 30080 | `world-cup-web` — soccer-themed scoreboard, `/api/live`, `/metrics` |
+| ✅ | 30080 | `world-cup-web` — soccer-themed tournament recap, `/api/tournament`, `/metrics` |
 | ✅ (or restrict via `grafana_nodeport_cidr`) | 30030 | Grafana dashboards |
 | ❌ | — | Prometheus (ClusterIP only — reach via an SSM tunnel) |
 | ❌ | — | SSH (22) — does not exist |
@@ -204,7 +204,7 @@ project for good.
 infra/bootstrap/   one-time backend bucket + GitHub OIDC IAM role
 infra/             the K3s host, SG, IAM instance role, budget alarm
 k8s/               namespace, monitoring stack, the web app
-src/app/           FastAPI app: soccer-themed frontend + /api/live + /metrics
+src/app/           FastAPI app: soccer-themed frontend + /api/tournament + /metrics
 scripts/           Grafana dashboard import
 docs/dashboards/   Grafana dashboard JSON
 ```

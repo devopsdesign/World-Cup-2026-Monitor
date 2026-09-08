@@ -91,16 +91,16 @@
       },
       {
         "id": 4,
-        "title": "Live Matches",
+        "title": "Golden Boot (goals)",
         "type": "stat",
         "datasource": { "type": "prometheus", "uid": "prometheus" },
         "gridPos": { "h": 6, "w": 4, "x": 0, "y": 8 },
-        "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "cyan" } } },
+        "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "yellow" } } },
         "targets": [
           {
             "refId": "A",
             "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "wc_live_matches_count"
+            "expr": "wc_golden_boot_goals"
           }
         ]
       },
@@ -121,7 +121,7 @@
       },
       {
         "id": 6,
-        "title": "Completed Matches",
+        "title": "Matches Played",
         "type": "stat",
         "datasource": { "type": "prometheus", "uid": "prometheus" },
         "gridPos": { "h": 6, "w": 4, "x": 8, "y": 8 },
@@ -178,16 +178,32 @@
       },
       {
         "id": 10,
-        "title": "Live Match Intensity Index",
-        "type": "timeseries",
+        "title": "Tournament Records",
+        "type": "stat",
         "datasource": { "type": "prometheus", "uid": "prometheus" },
         "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+        "options": { "textMode": "value_and_name", "orientation": "horizontal" },
         "targets": [
           {
             "refId": "A",
             "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "wc_live_match_intensity",
-            "legendFormat": "intensity"
+            "expr": "wc_hat_tricks_total",
+            "legendFormat": "Hat-tricks",
+            "instant": true
+          },
+          {
+            "refId": "B",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_penalty_shootout_matches_total",
+            "legendFormat": "Penalty shootouts",
+            "instant": true
+          },
+          {
+            "refId": "C",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_extra_time_matches_total",
+            "legendFormat": "Extra-time matches",
+            "instant": true
           }
         ]
       },
@@ -215,6 +231,28 @@
             "datasource": { "type": "prometheus", "uid": "prometheus" },
             "expr": "wc_cache_age_seconds",
             "legendFormat": "cache age (s)"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Champion",
+        "type": "stat",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "h": 4, "w": 24, "x": 0, "y": 22 },
+        "options": {
+          "textMode": "name",
+          "colorMode": "background",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^team$/" }
+        },
+        "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "yellow" } } },
+        "targets": [
+          {
+            "refId": "A",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "wc_tournament_champion_info == 1",
+            "legendFormat": "{{team}}",
+            "instant": true
           }
         ]
       }

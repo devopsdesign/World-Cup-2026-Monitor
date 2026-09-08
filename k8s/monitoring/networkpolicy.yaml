@@ -38,7 +38,8 @@ spec:
 ---
 # world-cup-web: accepts NodePort ingress (kube-proxy delivers it as
 # ingress with no matching podSelector on the source, i.e. "anywhere"),
-# and needs egress to the internet (worldcupjson.net) plus DNS.
+# and needs egress to the internet (raw.githubusercontent.com, for the
+# openfootball/worldcup.json dataset) plus DNS.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
