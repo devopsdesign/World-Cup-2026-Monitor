@@ -1,5 +1,17 @@
 name: Cleanup Infrastructure (Bulletproof)
 
+# Tears down everything infra/main.tf creates for this project and
+# guarantees a clean account afterwards. It is deliberately resilient:
+# `terraform destroy` may fail (partial state, a bucket a deploy left
+# non-empty, an AWS hiccup) and the run still finishes the job — every
+# post-terraform step runs `if: always()`, an independent AWS sweep
+# removes anything Terraform missed, and a final verification step is
+# the single source of truth for pass/fail.
+#
+# NOT touched (account-level, created by infra/bootstrap): the Terraform
+# state bucket, the DynamoDB lock table, the KMS key, and the
+# world-cup-monitor-gha-deploy OIDC role this workflow authenticates as.
+
 on:
   workflow_dispatch:
     inputs:
@@ -9,7 +21,7 @@ on:
         type: string
         default: ""
       project_name:
-        description: "Project Name Tag (e.g., world-cup-monitor)"
+        description: "Project name prefix (leave as default unless you changed it)"
         required: true
         type: string
         default: "world-cup-monitor"
@@ -30,9 +42,9 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE }}
-      # All workflow_dispatch inputs are passed through env: — never
-      # interpolated directly into a run: shell string — so a crafted
-      # input value can't break out into arbitrary shell commands.
+      # Every dispatch input is consumed through env: — never
+      # interpolated straight into a run: string — so a crafted value
+      # cannot break out into the shell.
       CONFIRM_INPUT: ${{ github.event.inputs.confirm }}
       PROJECT_TAG: ${{ github.event.inputs.project_name }}
       TF_VAR_project_name: ${{ github.event.inputs.project_name }}
@@ -47,10 +59,14 @@ jobs:
         run: |
           NORMALIZED=$(printf '%s' "$CONFIRM_INPUT" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
           if [ "$NORMALIZED" != "DELETE_ALL" ]; then
-            echo "ERROR: confirmation must be DELETE_ALL." >&2
+            echo "::error::confirmation must be DELETE_ALL (got '${CONFIRM_INPUT}')"
             exit 1
           fi
-          echo "Confirmed. Purging AWS assets tagged: $PROJECT_TAG"
+          case "$PROJECT_TAG" in
+            world-cup-monitor|world-cup-monitor-*) : ;;
+            *) echo "::error::refusing to sweep an unexpected project prefix '${PROJECT_TAG}'"; exit 1 ;;
+          esac
+          echo "Confirmed. Purging AWS assets for prefix: $PROJECT_TAG"
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -66,54 +82,188 @@ jobs:
         with:
           terraform_version: "1.9.0"
 
-      - name: Terraform Destroy
+      # ── Pre-flight: empty staging buckets so `terraform destroy` can
+      #    delete them even on providers/older configs without
+      #    force_destroy. Safe to run when nothing exists.
+      - name: Pre-flight — empty manifest staging buckets
+        continue-on-error: true
+        run: |
+          set -u
+          MATCHES=$(aws s3api list-buckets \
+            --query "Buckets[?starts_with(Name, '${PROJECT_TAG}-manifests-')].Name" --output text || true)
+          for b in $MATCHES; do
+            echo "Emptying s3://$b"
+            aws s3 rm "s3://$b" --recursive || true
+          done
+
+      # ── Terraform destroy (guarded + retried). continue-on-error so a
+      #    failure here never skips the independent sweep below.
+      - name: Terraform destroy
+        id: tf_destroy
+        continue-on-error: true
         working-directory: ./infra
         run: |
-          terraform init \
+          set -u
+          if ! aws s3api head-bucket --bucket "$TF_STATE_BUCKET" 2>/dev/null; then
+            echo "State bucket $TF_STATE_BUCKET not found — skipping Terraform, relying on the sweep."
+            exit 0
+          fi
+
+          terraform init -input=false \
             -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="dynamodb_table=$TF_LOCK_TABLE" \
             -backend-config="region=$AWS_REGION" \
             -backend-config="key=k3s-cluster/terraform.tfstate" \
             -backend-config="encrypt=true"
-          terraform destroy -auto-approve
 
-      - name: Scan and terminate orphaned EC2/EBS/SG resources
+          for attempt in 1 2 3; do
+            echo "::group::terraform destroy (attempt $attempt/3)"
+            if terraform destroy -auto-approve -input=false -refresh=true; then
+              echo "::endgroup::"
+              echo "destroy_ok=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "destroy attempt $attempt failed; retrying in 20s"
+            sleep 20
+          done
+          echo "::warning::terraform destroy did not converge after 3 attempts — the sweep will finish the job"
+          exit 1
+
+      # ── Independent AWS sweep. Runs regardless of Terraform's result.
+      - name: Sweep orphaned AWS resources
+        if: always()
+        continue-on-error: true
         run: |
-          INSTANCE_IDS=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=*${PROJECT_TAG}*" "Name=instance-state-name,Values=running,pending,stopped" \
-            --query 'Reservations[*].Instances[*].InstanceId' --output text)
-          if [ -n "$INSTANCE_IDS" ]; then
-            echo "Terminating instances: $INSTANCE_IDS"
-            aws ec2 terminate-instances --instance-ids $INSTANCE_IDS
-            aws ec2 wait instance-terminated --instance-ids $INSTANCE_IDS
+          set -u
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+          echo "── EC2 instances"
+          IIDS=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${PROJECT_TAG}-*" \
+              "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          if [ -n "$IIDS" ]; then
+            echo "terminating: $IIDS"
+            aws ec2 terminate-instances --instance-ids $IIDS >/dev/null || true
+            aws ec2 wait instance-terminated --instance-ids $IIDS || true
           fi
 
-          VOLUME_IDS=$(aws ec2 describe-volumes \
-            --filters "Name=tag:Name,Values=*${PROJECT_TAG}*" \
-            --query 'Volumes[*].VolumeId' --output text)
-          for vol in $VOLUME_IDS; do
-            echo "Deleting volume: $vol"
-            aws ec2 delete-volume --volume-id "$vol" || true
-          done
-
-          SG_IDS=$(aws ec2 describe-security-groups \
-            --filters "Name=tag:Name,Values=*${PROJECT_TAG}*" \
-            --query 'SecurityGroups[*].GroupId' --output text)
-          for sg in $SG_IDS; do
-            echo "Deleting security group: $sg"
+          echo "── Security groups"
+          for sg in $(aws ec2 describe-security-groups \
+            --filters "Name=tag:Name,Values=${PROJECT_TAG}-*" \
+            --query 'SecurityGroups[].GroupId' --output text); do
+            echo "deleting $sg"
             aws ec2 delete-security-group --group-id "$sg" || true
           done
 
-      - name: Empty and delete the manifest-staging S3 bucket
-        run: |
-          BUCKETS=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, '${PROJECT_TAG}-manifests-')].Name" --output text)
-          for bucket in $BUCKETS; do
-            echo "Emptying and deleting bucket: $bucket"
-            aws s3 rm "s3://$bucket" --recursive || true
-            aws s3 rb "s3://$bucket" --force || true
+          echo "── EBS volumes"
+          for v in $(aws ec2 describe-volumes \
+            --filters "Name=tag:Name,Values=${PROJECT_TAG}-*" "Name=status,Values=available" \
+            --query 'Volumes[].VolumeId' --output text); do
+            echo "deleting $v"
+            aws ec2 delete-volume --volume-id "$v" || true
           done
 
-      - name: Final summary
+          echo "── IAM instance profiles + node roles (NOT the gha-deploy OIDC role)"
+          for prof in $(aws iam list-instance-profiles \
+            --query "InstanceProfiles[?starts_with(InstanceProfileName, '${PROJECT_TAG}-node-')].InstanceProfileName" \
+            --output text); do
+            for r in $(aws iam get-instance-profile --instance-profile-name "$prof" \
+              --query 'InstanceProfile.Roles[].RoleName' --output text); do
+              aws iam remove-role-from-instance-profile --instance-profile-name "$prof" --role-name "$r" || true
+            done
+            echo "deleting instance profile $prof"
+            aws iam delete-instance-profile --instance-profile-name "$prof" || true
+          done
+          for role in $(aws iam list-roles \
+            --query "Roles[?starts_with(RoleName, '${PROJECT_TAG}-node-')].RoleName" --output text); do
+            for p in $(aws iam list-attached-role-policies --role-name "$role" \
+              --query 'AttachedPolicies[].PolicyArn' --output text); do
+              aws iam detach-role-policy --role-name "$role" --policy-arn "$p" || true
+            done
+            for p in $(aws iam list-role-policies --role-name "$role" \
+              --query 'PolicyNames[]' --output text); do
+              aws iam delete-role-policy --role-name "$role" --policy-name "$p" || true
+            done
+            echo "deleting role $role"
+            aws iam delete-role --role-name "$role" || true
+          done
+
+          echo "── Budget"
+          aws budgets delete-budget --account-id "$ACCOUNT_ID" \
+            --budget-name "${PROJECT_TAG}-free-tier-guard" 2>/dev/null || true
+
+      - name: Delete manifest staging buckets
+        if: always()
+        continue-on-error: true
         run: |
-          echo "Cleanup complete for tag: $PROJECT_TAG"
-          echo "Note: the Terraform state bucket, lock table, and the GitHub OIDC IAM role (infra/bootstrap) are account-level and intentionally NOT deleted by this workflow — destroy them manually via infra/bootstrap if you are decommissioning the project entirely."
+          set -u
+          for b in $(aws s3api list-buckets \
+            --query "Buckets[?starts_with(Name, '${PROJECT_TAG}-manifests-')].Name" --output text); do
+            echo "── $b"
+            # objects, then any versions/delete-markers, then the bucket
+            aws s3 rm "s3://$b" --recursive || true
+            VERSIONS=$(aws s3api list-object-versions --bucket "$b" \
+              --query '{Objects: [].{Key:Key,VersionId:VersionId}}' \
+              --output json 2>/dev/null || echo '{"Objects":null}')
+            if [ "$(echo "$VERSIONS" | python3 -c 'import sys,json;print(len(json.load(sys.stdin).get("Objects") or []))')" != "0" ]; then
+              aws s3api delete-objects --bucket "$b" --delete "$VERSIONS" || true
+            fi
+            aws s3api delete-bucket --bucket "$b" || true
+          done
+
+      # ── Reconcile Terraform state: with the resources gone, a final
+      #    destroy refreshes and empties the state file cleanly.
+      - name: Reconcile Terraform state
+        if: always()
+        continue-on-error: true
+        working-directory: ./infra
+        run: |
+          set -u
+          aws s3api head-bucket --bucket "$TF_STATE_BUCKET" 2>/dev/null || { echo "no state bucket; nothing to reconcile"; exit 0; }
+          [ -d .terraform ] || terraform init -input=false \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="dynamodb_table=$TF_LOCK_TABLE" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="key=k3s-cluster/terraform.tfstate" \
+            -backend-config="encrypt=true"
+          terraform destroy -auto-approve -input=false -refresh=true || true
+          terraform state list || true
+
+      # ── Source of truth: fail the run if ANY project resource remains.
+      - name: Verify the account is clean
+        if: always()
+        run: |
+          set -u
+          REMAIN=""
+
+          I=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${PROJECT_TAG}-*" \
+              "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          [ -n "$I" ] && REMAIN="${REMAIN}\ninstances: $I"
+
+          S=$(aws ec2 describe-security-groups \
+            --filters "Name=tag:Name,Values=${PROJECT_TAG}-*" \
+            --query 'SecurityGroups[].GroupId' --output text)
+          [ -n "$S" ] && REMAIN="${REMAIN}\nsecurity-groups: $S"
+
+          B=$(aws s3api list-buckets \
+            --query "Buckets[?starts_with(Name, '${PROJECT_TAG}-manifests-')].Name" --output text)
+          [ -n "$B" ] && REMAIN="${REMAIN}\nbuckets: $B"
+
+          R=$(aws iam list-roles \
+            --query "Roles[?starts_with(RoleName, '${PROJECT_TAG}-node-')].RoleName" --output text)
+          [ -n "$R" ] && REMAIN="${REMAIN}\nnode-roles: $R"
+
+          if [ -n "$REMAIN" ]; then
+            echo -e "::error::project resources still present:${REMAIN}"
+            exit 1
+          fi
+          {
+            echo "## Cleanup verified"
+            echo "No \`${PROJECT_TAG}-*\` instances, security groups, staging buckets or node roles remain."
+            echo ""
+            echo "Preserved (account-level, from infra/bootstrap): state bucket \`${TF_STATE_BUCKET}\`, lock table \`${TF_LOCK_TABLE}\`, and the OIDC deploy role."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -171,6 +171,11 @@ resource "aws_iam_instance_profile" "k3s_node" {
 ########################################################################
 resource "aws_s3_bucket" "manifests" {
   bucket = "${var.project_name}-manifests-${random_id.key_suffix.hex}"
+
+  # Transient staging bucket (1-day lifecycle, no versioning). Let
+  # `terraform destroy` empty and remove it in one step instead of
+  # failing with BucketNotEmpty when a deploy left manifests behind.
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "manifests" {
