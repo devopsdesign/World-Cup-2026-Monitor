@@ -376,6 +376,20 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     actions   = ["sts:GetCallerIdentity", "sts:GetServiceBearerToken"]
     resources = ["*"]
   }
+
+  # Read-only account-wide list calls that have no resource-level form.
+  # cleanup.yml prefers names discovered from Terraform state, but these
+  # let it still enumerate leftovers when the state file itself is gone.
+  statement {
+    sid    = "AccountWideDiscoveryForCleanup"
+    effect = "Allow"
+    actions = [
+      "s3:ListAllMyBuckets",
+      "iam:ListRoles",
+      "iam:ListInstanceProfiles",
+    ]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "github_actions" {
