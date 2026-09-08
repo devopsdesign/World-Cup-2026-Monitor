@@ -31,12 +31,14 @@ A real-time, cloud-native monitoring platform for the 2026 FIFA World Cup — a 
                                      └────────────────┘
 ```
 
-Single `t3.micro` EC2 instance running K3s. The Kubernetes API is bound
-to `127.0.0.1` only — it is **never** reachable from outside the
-instance. All cluster management (applying manifests, checking
-rollouts) happens over **AWS SSM Run Command**, which needs no inbound
-port. There is no SSH key anywhere in this stack; interactive shell
-access, if you ever need it, goes through **SSM Session Manager**.
+Single `t3.micro` EC2 instance running K3s. The Kubernetes API listens
+on `6443`, but the security group opens **no 6443 ingress rule**, so it
+is unreachable from the internet. (It is *not* bound to loopback —
+doing so breaks the in-cluster `kubernetes` service and kills CoreDNS.)
+All cluster management happens over **AWS SSM Run Command** running
+`k3s kubectl` on the node, which needs no inbound port. There is no SSH
+key anywhere in this stack; interactive shell access goes through
+**SSM Session Manager**.
 
 | Exposed publicly | Port | What |
 |---|---|---|
@@ -44,7 +46,7 @@ access, if you ever need it, goes through **SSM Session Manager**.
 | ✅ (or restrict via `grafana_nodeport_cidr`) | 30030 | Grafana dashboards |
 | ❌ | — | Prometheus (ClusterIP only — reach via an SSM tunnel) |
 | ❌ | — | SSH (22) — does not exist |
-| ❌ | — | Kubernetes API (6443) — bound to loopback, no SG rule at all |
+| ❌ | — | Kubernetes API (6443) — listening, but no SG ingress rule |
 
 ---
 

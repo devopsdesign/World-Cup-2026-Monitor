@@ -13,8 +13,9 @@ name: Deploy K3s + Monitoring Stack (Hardened)
 # There is no AWS access key/secret anywhere in this file — auth is
 # short-lived GitHub OIDC -> AWS IAM role (see infra/bootstrap/main.tf).
 # There is no SSH key and no direct Kubernetes API access: all
-# in-cluster work happens via AWS SSM Run Command against the node's
-# local (loopback-only) k3s API.
+# in-cluster work happens via AWS SSM Run Command running `k3s kubectl`
+# locally on the node. The k3s API listens on 6443 but the security
+# group opens no 6443 ingress, so it is unreachable from the internet.
 
 on:
   push:
@@ -250,6 +251,23 @@ jobs:
           for i in $(seq 1 60); do
             k3s kubectl get --raw='/readyz' >/dev/null 2>&1 && break
             echo "waiting for k3s API ($i/60)"; sleep 5
+          done
+
+          # Refuse to deploy onto a cluster whose DNS is down; try to heal
+          # it once (a k3s restart clears most CoreDNS/flannel bootstrap
+          # races) before giving up.
+          for attempt in 1 2; do
+            if k3s kubectl -n kube-system rollout status deploy/coredns --timeout=120s; then break; fi
+            if [ "$attempt" = 1 ]; then
+              echo "::warning::CoreDNS not ready — restarting k3s"
+              systemctl restart k3s
+              sleep 20
+            else
+              echo "::error::CoreDNS still not ready after a k3s restart"
+              k3s kubectl -n kube-system get pods -o wide || true
+              k3s kubectl -n kube-system logs -l k8s-app=kube-dns --tail=30 || true
+              exit 1
+            fi
           done
 
           aws s3 sync "s3://__BUCKET__/k8s" /tmp/k8s --delete

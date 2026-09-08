@@ -265,11 +265,15 @@ resource "aws_instance" "k3s_server" {
     LOG="/var/log/user-data.log"
     echo "=== K3s Bootstrap Started at $(date) ===" > $LOG
 
-    fallocate -l 1G /swapfile
+    # 2 GB swap — a 1 GB t3.micro running k3s + Prometheus + Grafana is
+    # memory-tight; without headroom the control plane thrashes and
+    # CoreDNS / local-path-provisioner get OOM-killed during bootstrap.
+    fallocate -l 2G /swapfile
     chmod 600 /swapfile
     mkswap /swapfile
     swapon /swapfile
     echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    sysctl -w vm.swappiness=40
 
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
@@ -279,16 +283,33 @@ resource "aws_instance" "k3s_server" {
     # sure it's enabled so Session Manager / Run Command work immediately.
     snap start amazon-ssm-agent || systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || true
 
-    # K3s API is bound to localhost only — it is never reachable from
-    # outside the instance. All kubectl access happens locally via SSM
-    # Run Command, or via an SSM port-forward tunnel run on demand.
+    # The Kubernetes API is kept private by the security group (no 6443
+    # ingress rule anywhere) — NOT by binding the apiserver to loopback.
+    # `--bind-address=127.0.0.1` makes the in-cluster `kubernetes` service
+    # (10.43.0.1:443 -> node-ip:6443) unreachable, so CoreDNS's kubernetes
+    # plugin never syncs and ALL cluster DNS dies. So: bind normally.
+    #
     # --resolv-conf: Ubuntu 22.04 runs systemd-resolved, so /etc/resolv.conf
-    # is the 127.0.0.53 stub — unreachable from the CoreDNS pod, which
-    # breaks ALL in-cluster DNS. Point k3s at the real upstream list.
-    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --bind-address=127.0.0.1 --tls-san=127.0.0.1 --disable=servicelb --disable=traefik --disable=metrics-server --write-kubeconfig-mode 600 --kubelet-arg=fail-swap-on=false --resolv-conf=/run/systemd/resolve/resolv.conf" sh -
+    # is the 127.0.0.53 stub — unreachable from the CoreDNS pod. Point k3s
+    # at the real upstream resolver list instead.
+    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --tls-san=127.0.0.1 --disable=servicelb --disable=traefik --disable=metrics-server --write-kubeconfig-mode 600 --kubelet-arg=fail-swap-on=false --resolv-conf=/run/systemd/resolve/resolv.conf" sh -
 
-    systemctl enable k3s
-    systemctl start k3s
+    systemctl enable --now k3s
+
+    # Wait for the cluster to actually converge; heal a bootstrap race
+    # (flannel subnet.env / CoreDNS OOM) with one restart if it doesn't.
+    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+    for i in $(seq 1 30); do
+      if k3s kubectl -n kube-system rollout status deploy/coredns --timeout=20s 2>/dev/null; then
+        echo "coredns ready after $((i*20))s" >> $LOG
+        break
+      fi
+      if [ "$i" = 12 ]; then
+        echo "coredns not ready at 240s — restarting k3s" >> $LOG
+        systemctl restart k3s
+      fi
+      sleep 20
+    done
   SCRIPT
   )
 
