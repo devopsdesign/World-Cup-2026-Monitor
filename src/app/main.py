@@ -304,7 +304,34 @@ async def lifespan(_: FastAPI):
         task.cancel()
 
 
-app = FastAPI(title="World Cup 2026 Monitor", lifespan=lifespan)
+app = FastAPI(title="World Cup 2026 Monitor", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+
+# The page is a self-contained dark dashboard plus a Google-fonts link;
+# lock the browser down to exactly that.
+_SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "style-src 'self' https://fonts.googleapis.com; "
+        "font-src https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "geolocation=(), camera=(), microphone=(), interest-cohort=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+}
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    for name, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    return response
 
 
 @app.get("/healthz")

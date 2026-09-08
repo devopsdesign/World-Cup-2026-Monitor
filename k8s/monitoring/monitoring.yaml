@@ -1,8 +1,12 @@
+# node-exporter needs hostNetwork + hostPID + hostPath, which Pod
+# Security Admission "baseline" forbids. It belongs in a system
+# namespace (kube-system runs at PSA "privileged"), which also keeps
+# the world-cup-monitoring namespace clean enough for "restricted".
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: node-exporter
-  namespace: world-cup-monitoring
+  namespace: kube-system
   labels:
     app: node-exporter
 spec:
@@ -66,7 +70,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: node-exporter-service
-  namespace: world-cup-monitoring
+  namespace: kube-system
 spec:
   selector:
     app: node-exporter
@@ -92,7 +96,7 @@ data:
           - targets: ['localhost:9090']
       - job_name: 'node-exporter'
         static_configs:
-          - targets: ['node-exporter-service:9100']
+          - targets: ['node-exporter-service.kube-system.svc.cluster.local:9100']
         relabel_configs:
           - source_labels: [__name__]
             regex: 'node_filesystem.*'
@@ -240,6 +244,31 @@ spec:
               value: "false"
             - name: GF_AUTH_DISABLE_LOGIN_FORM
               value: "false"
+            - name: GF_USERS_VIEWERS_CAN_EDIT
+              value: "false"
+            # No outbound calls: no phone-home, no update checks, no
+            # external image renderer / snapshot server, no Gravatar.
+            - name: GF_ANALYTICS_REPORTING_ENABLED
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES
+              value: "false"
+            - name: GF_SNAPSHOTS_EXTERNAL_ENABLED
+              value: "false"
+            - name: GF_SECURITY_DISABLE_GRAVATAR
+              value: "true"
+            # Response hardening headers.
+            - name: GF_SECURITY_COOKIE_SECURE
+              value: "false" # served over plain HTTP on the NodePort
+            - name: GF_SECURITY_COOKIE_SAMESITE
+              value: "strict"
+            - name: GF_SECURITY_CONTENT_SECURITY_POLICY
+              value: "true"
+            - name: GF_SECURITY_X_CONTENT_TYPE_OPTIONS
+              value: "true"
+            - name: GF_SECURITY_X_XSS_PROTECTION
+              value: "true"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -6,7 +6,13 @@
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=Prometheus&logoColor=white)](https://prometheus.io/)
 [![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=Grafana&logoColor=white)](https://grafana.com/)
 
-A real-time, cloud-native monitoring platform for the 2026 FIFA World Cup — a soccer-themed live scoreboard backed by **K3s**, **Prometheus**, **Grafana**, and a small **Python/FastAPI** service, deployed entirely inside the **AWS Free Tier** with no SSH keys, no public Kubernetes API, and no long-lived AWS credentials in CI.
+A cloud-native observability stack for the 2026 FIFA World Cup — a soccer-themed
+tournament recap backed by **K3s**, **Prometheus**, **Grafana**, and a small
+**Python/FastAPI** service, deployed entirely inside the **AWS Free Tier** with no
+SSH keys, no public Kubernetes API, and no long-lived AWS credentials in CI.
+
+📄 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — system & runtime diagrams, deploy sequence, design decisions
+🔒 **[docs/SECURITY.md](docs/SECURITY.md)** — threat model, the full control catalogue (all $0), how to verify each one, break-glass
 
 ---
 
@@ -50,70 +56,47 @@ key anywhere in this stack; interactive shell access goes through
 
 ---
 
-## Security model (what changed from the original audit)
+## Security posture
 
-1. **Network** — Security group only opens 30080/30030. No 22, no 6443,
-   no `30000-32767` catch-all. See [infra/main.tf](infra/main.tf).
-2. **No SSH key, no kubeconfig, no key material as Terraform output or
-   CI artifact.** Node management is 100% SSM (Run Command +
-   Session Manager). See the `IAM: instance role` section of
-   [infra/main.tf](infra/main.tf).
-3. **CI auth is GitHub OIDC → a scoped IAM role** (see
-   [infra/bootstrap/main.tf](infra/bootstrap/main.tf)), not static
-   `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` secrets.
-4. **Grafana has no default credentials.** The admin password is a
-   GitHub Actions secret, rendered into a Kubernetes `Secret` at deploy
-   time (`kubectl create secret ... --dry-run=client`) and never
-   committed. Anonymous access and self-signup are disabled.
-5. **Cost safety**: `credit_specification { cpu_credits = "standard" }`
-   on the EC2 instance prevents surprise T3-Unlimited billing; an
-   `aws_budgets_budget` emails you at 80%/100% of a ~$1 threshold; the
-   CPU busy-loop placeholder app and the ad-hoc `load-test.sh` (which
-   hit hardcoded public IPs) have been removed.
-6. **State bucket hardening** — [infra/bootstrap/main.tf](infra/bootstrap/main.tf)
-   creates the Terraform backend bucket with public-access-block,
-   SSE-KMS, versioning, and a deny-non-TLS/deny-non-KMS bucket policy.
-7. **Workloads** run `runAsNonRoot`, drop all Linux capabilities,
-   disable privilege escalation, and use read-only root filesystems
-   where the container supports it (see every manifest under
-   [k8s/](k8s/)). `NetworkPolicy` objects restrict pod-to-pod traffic
-   to what's actually needed (note: K3s's default Flannel CNI doesn't
-   *enforce* NetworkPolicy — see the comment in
-   [k8s/monitoring/networkpolicy.yaml](k8s/monitoring/networkpolicy.yaml)
-   for how to make it real).
-8. **Supply chain** — the old `pip install` inside a Kubernetes shell
-   command at pod-start has been replaced by a pinned, pre-built image
-   ([src/app/Dockerfile](src/app/Dockerfile)) built once in CI and
-   deployed by immutable tag (`worldcup-web:<git-sha>`, never `:latest`).
-9. **Prometheus** no longer runs `--web.enable-lifecycle` (which exposed
-   an unauthenticated reload/quit endpoint) and its Service is
-   `ClusterIP`, not `NodePort`.
-10. **CI/CD** — least-privilege `permissions:` block, a `concurrency`
-    group so applies/destroys can't race, a protected `production`
-    GitHub Environment (add required reviewers in repo settings), all
-    workflow inputs/secrets passed through `env:` rather than
-    interpolated directly into shell strings, and every third-party
-    Action pinned to a commit SHA (kept current via
-    [.github/dependabot.yml](.github/dependabot.yml)).
+Free-Tier, ~$0/month, and hardened at every layer — **[docs/SECURITY.md](docs/SECURITY.md)**
+has the full catalogue, the threat model, verification commands, and break-glass.
+The short version:
+
+- **Network** — security group opens only `30080` (app) and `30030` (Grafana). No `22`, no `6443`.
+- **Identity** — CI authenticates with **GitHub OIDC** to a resource-scoped IAM role (≤1 h sessions); no static AWS keys anywhere.
+- **Node** — SSM only (Run Command + Session Manager); no SSH daemon, no key pair. Manifests are applied *on the node*, so the runner never touches the K8s API.
+- **K3s** — `--secrets-encryption`, metadata audit log, `profiling=false`, `service-account-lookup=true`; Traefik/servicelb/metrics-server disabled.
+- **Workloads** — namespace **Pod Security Admission** (`enforce: baseline`, `audit/warn: restricted`); every pod is non-root, no caps, no priv-esc, read-only rootfs, `RuntimeDefault` seccomp, no SA token.
+- **NetworkPolicy** — default-deny + explicit allows, **enforced** by K3s's built-in controller.
+- **App** — strict CSP + security headers on every response, docs endpoints disabled, third-party data rendered as text only, upstream fetched server-side with bounded timeouts.
+- **AWS account** (`infra/bootstrap`) — default EBS encryption, account-wide S3 Block Public Access, IAM Access Analyzer, IAM password policy, KMS-encrypted/versioned/TLS-only state bucket.
+- **Cost** — `cpu_credits = "standard"` (no T3-Unlimited surprise), instance-type validation, `$1` Budgets alarm, a `cleanup.yml` that verifies a clean account.
 
 ---
 
 ## One-time setup (per AWS account)
 
-1. **Bootstrap the backend + OIDC role** (local Terraform, run once by
-   a human with AWS admin credentials):
+1. **Bootstrap the backend + OIDC role + account security baseline**
+   (local Terraform, run once by a human with AWS admin credentials):
    ```bash
    cd infra/bootstrap
    terraform init
    terraform apply \
      -var="github_owner=<your-github-org-or-user>" \
      -var="github_repo=World-Cup-2026-Monitor"
-   #   -var="aws_region=us-east-1"   # only if not us-east-1
+   #   -var="aws_region=us-east-1"                 # only if not us-east-1
+   #   -var="manage_account_password_policy=false" # if you manage it elsewhere
+   #   -var="lock_default_security_group=true"     # CIS 5.4, if nothing else uses the default VPC
+   #   -var="enable_cloudtrail=true"               # durable API log (~$0.05/mo of S3)
 
    terraform output          # copy these values into the repo config below
    ```
    Outputs: `state_bucket_name`, `lock_table_name`, `state_kms_key_arn`,
-   `state_kms_key_alias`, `aws_role_arn`, `aws_region`.
+   `state_kms_key_alias`, `aws_role_arn`, `aws_region`, `access_analyzer_arn`.
+   This also turns on default EBS encryption, account-wide S3 Block Public
+   Access, IAM Access Analyzer, and an IAM password policy — see
+   [docs/SECURITY.md](docs/SECURITY.md#controls). Re-run it after pulling
+   changes to `infra/bootstrap/`.
 
 2. **Wire up the remote backend** for the main stack:
    ```bash
