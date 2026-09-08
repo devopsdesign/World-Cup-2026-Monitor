@@ -299,6 +299,14 @@ jobs:
 
           echo "--- final state ---"
           k3s kubectl -n "$NS" get pods -o wide
+          echo "--- world-cup-web logs (tail) ---"
+          k3s kubectl -n "$NS" logs deployment/world-cup-web --tail=40 || true
+          echo "--- upstream reachability from the node ---"
+          curl -sS -m 15 -o /dev/null -w 'openfootball https %{http_code} in %{time_total}s\n' \
+            https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json || echo "node cannot reach openfootball"
+          echo "--- in-pod check ---"
+          POD=$(k3s kubectl -n "$NS" get pod -l app=world-cup-web -o jsonpath='{.items[0].metadata.name}')
+          k3s kubectl -n "$NS" exec "$POD" -- python -c "import httpx;r=httpx.get('https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json',timeout=15);print('in-pod https', r.status_code, len(r.content))" 2>&1 || true
           EOS
           )
           SCRIPT="${SCRIPT//__BUCKET__/$MANIFEST_BUCKET}"
