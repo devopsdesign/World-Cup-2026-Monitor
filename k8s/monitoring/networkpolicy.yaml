@@ -1,15 +1,18 @@
-# Default-deny for the namespace, then explicit allows for the traffic
-# the stack actually needs. NodePort traffic arrives via kube-proxy on
-# the node, which NetworkPolicy egress/ingress rules below still permit
-# since it's evaluated as ingress from "anywhere" (podSelector: {}) —
-# only pod-to-pod traffic inside the cluster is restricted here.
+# Default-deny for the namespace, then explicit allows for exactly the
+# traffic the stack needs.
 #
-# IMPORTANT: K3s's default CNI (Flannel) does not enforce NetworkPolicy
-# at all — these objects will apply cleanly but silently do nothing
-# unless the cluster runs a policy-capable CNI. To actually enforce
-# them, install k3s with `--flannel-backend=none --disable-network-policy`
-# and add Calico (or another NetworkPolicy-capable CNI) afterwards.
-# Left in place here as defense-in-depth / documentation of intent.
+# K3s DOES enforce NetworkPolicy — it ships a built-in controller
+# (kube-router based) and this cluster is installed WITHOUT
+# `--disable-network-policy`, so these rules are live.
+#
+# Canonical idiom notes:
+#   * "to any destination on port N" is written as a rule with `ports:`
+#     and NO `to:` key. An explicit `to: []` (empty list) is read by
+#     kube-router as "match nothing" and silently blocks the traffic —
+#     that is what broke pod DNS in an earlier revision.
+#   * NodePort traffic is SNAT'd to a node/bridge address by kube-proxy,
+#     so ingress for a NodePort service is allowed from anywhere on that
+#     port (a `ports:`-only rule).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -19,7 +22,8 @@ spec:
   podSelector: {}
   policyTypes: ["Ingress", "Egress"]
 ---
-# DNS must always be allowed or every other policy breaks name resolution.
+# DNS for every pod (CoreDNS lives in kube-system). Without this, every
+# other egress rule is useless because names don't resolve.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -29,17 +33,14 @@ spec:
   podSelector: {}
   policyTypes: ["Egress"]
   egress:
-    - to: []
-      ports:
+    - ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
 ---
-# world-cup-web: accepts NodePort ingress (kube-proxy delivers it as
-# ingress with no matching podSelector on the source, i.e. "anywhere"),
-# and needs egress to the internet (raw.githubusercontent.com, for the
-# openfootball/worldcup.json dataset) plus DNS.
+# world-cup-web: NodePort ingress on 8080 (+ Prometheus scrape), egress
+# to HTTPS (raw.githubusercontent.com for the openfootball dataset).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -51,25 +52,15 @@ spec:
       app: world-cup-web
   policyTypes: ["Ingress", "Egress"]
   ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: prometheus
-      ports:
-        - protocol: TCP
-          port: 8080
-    - from: [] # NodePort (30080) traffic reaches the pod as unmatched ingress
-      ports:
+    - ports:
         - protocol: TCP
           port: 8080
   egress:
-    - to: []
-      ports:
+    - ports:
         - protocol: TCP
           port: 443
 ---
-# Prometheus: scrape node-exporter + the web app, accept queries only
-# from Grafana (no NodePort — it's ClusterIP-only).
+# Prometheus: scraped by Grafana only; scrapes node-exporter + the web app.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -89,11 +80,9 @@ spec:
         - protocol: TCP
           port: 9090
   egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              app: node-exporter
-      ports:
+    # node-exporter runs hostNetwork, so its traffic uses the node IP and
+    # a podSelector peer won't match — allow 9100 to any destination.
+    - ports:
         - protocol: TCP
           port: 9100
     - to:
@@ -104,7 +93,7 @@ spec:
         - protocol: TCP
           port: 8080
 ---
-# Grafana: served on NodePort 30030, reads from Prometheus only.
+# Grafana: NodePort ingress on 3000; reads from Prometheus.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -116,8 +105,7 @@ spec:
       app: grafana
   policyTypes: ["Ingress", "Egress"]
   ingress:
-    - from: [] # NodePort (30030) traffic
-      ports:
+    - ports:
         - protocol: TCP
           port: 3000
   egress:
