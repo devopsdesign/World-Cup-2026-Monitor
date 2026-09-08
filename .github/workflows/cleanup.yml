@@ -108,19 +108,23 @@ jobs:
             -backend-config="key=k3s-cluster/terraform.tfstate" \
             -backend-config="encrypt=true"
 
-          MB=$(terraform output -raw manifest_bucket 2>/dev/null || true)
-          IID=$(terraform output -raw ec2_instance_id 2>/dev/null || true)
-          # random_id suffix shared by the SG / IAM role / instance profile names
-          SUFFIX=""
-          [ -n "$MB" ] && SUFFIX="${MB##*-manifests-}"
-          if [ -z "$SUFFIX" ]; then
-            SUFFIX=$(terraform state show random_id.key_suffix 2>/dev/null | sed -n 's/.*hex *= *"\([0-9a-f]*\)".*/\1/p' | head -1)
-          fi
+          # Read from `state show`, not `output` — a partial destroy strips
+          # the outputs block ("Warning: No outputs found"), but the
+          # resources themselves stay in state until they're really gone.
+          SUFFIX=$(terraform state show -no-color random_id.key_suffix 2>/dev/null \
+            | sed -n 's/^[[:space:]]*hex[[:space:]]*=[[:space:]]*"\([0-9a-f]\{6,16\}\)".*/\1/p' | head -1)
+          MB=$(terraform state show -no-color aws_s3_bucket.manifests 2>/dev/null \
+            | sed -n 's/^[[:space:]]*bucket[[:space:]]*=[[:space:]]*"\([a-z0-9.-]\{3,63\}\)".*/\1/p' | head -1)
+          [ -z "$MB" ] && [ -n "$SUFFIX" ] && MB="${PROJECT_TAG}-manifests-${SUFFIX}"
 
-          echo "manifest_bucket=$MB"    >> "$GITHUB_ENV"
-          echo "instance_id=$IID"       >> "$GITHUB_ENV"
-          echo "name_suffix=$SUFFIX"    >> "$GITHUB_ENV"
-          echo "discovered → bucket='$MB' instance='$IID' suffix='$SUFFIX'"
+          # Strict validation — never let stray text reach $GITHUB_ENV.
+          case "$MB" in ""|*[!a-z0-9.-]*) MB="" ;; esac
+          case "$SUFFIX" in ""|*[!a-f0-9]*) SUFFIX="" ;; esac
+
+          printf 'manifest_bucket=%s\n' "$MB" >> "$GITHUB_ENV"
+          printf 'name_suffix=%s\n'     "$SUFFIX" >> "$GITHUB_ENV"
+          echo "discovered → bucket='${MB:-<none>}' suffix='${SUFFIX:-<none>}'"
+          echo "── current state:"; terraform state list 2>/dev/null || true
 
       # ── Empty the staging bucket by its known name (resource-scoped
       #    perms cover this) so `terraform destroy` can remove it.
@@ -262,6 +266,20 @@ jobs:
           if [ -n "${name_suffix:-}" ] && aws iam get-role \
             --role-name "${PROJECT_TAG}-node-role-${name_suffix}" >/dev/null 2>&1; then
             REMAIN="${REMAIN} node-role=[${PROJECT_TAG}-node-role-${name_suffix}]"
+          fi
+
+          # Backstop: any AWS resource still in Terraform state means the
+          # destroy did not finish, even if the name-checks above missed it.
+          if aws s3api head-bucket --bucket "$TF_STATE_BUCKET" 2>/dev/null; then
+            LEFT=$(cd infra \
+              && terraform init -input=false -reconfigure \
+                   -backend-config="bucket=$TF_STATE_BUCKET" \
+                   -backend-config="dynamodb_table=$TF_LOCK_TABLE" \
+                   -backend-config="region=$AWS_REGION" \
+                   -backend-config="key=k3s-cluster/terraform.tfstate" \
+                   -backend-config="encrypt=true" >/dev/null 2>&1 \
+              && terraform state list 2>/dev/null | grep '^aws_' || true)
+            [ -n "$LEFT" ] && REMAIN="${REMAIN} tf-state=[$(echo "$LEFT" | tr '\n' ' ')]"
           fi
 
           if [ -n "$REMAIN" ]; then
