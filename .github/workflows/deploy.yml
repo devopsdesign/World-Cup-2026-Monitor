@@ -235,6 +235,7 @@ jobs:
         run: |
           SCRIPT=$(cat <<'EOS'
           set -e
+          NS=world-cup-monitoring
           cloud-init status --wait || true
           export DEBIAN_FRONTEND=noninteractive
           MISSING=""
@@ -244,18 +245,60 @@ jobs:
             apt-get update
             apt-get install -y $MISSING
           fi
+
+          # Wait for k3s itself to be serving before touching it.
+          for i in $(seq 1 60); do
+            k3s kubectl get --raw='/readyz' >/dev/null 2>&1 && break
+            echo "waiting for k3s API ($i/60)"; sleep 5
+          done
+
           aws s3 sync "s3://__BUCKET__/k8s" /tmp/k8s --delete
+
+          dump() {
+            echo "==================== DIAGNOSTICS ===================="
+            echo "--- free -m ---";            free -m || true
+            echo "--- nodes ---";              k3s kubectl get nodes -o wide || true
+            echo "--- pods ---";               k3s kubectl -n "$NS" get pods -o wide || true
+            for p in $(k3s kubectl -n "$NS" get pods -o name 2>/dev/null); do
+              echo "--- describe $p ---";      k3s kubectl -n "$NS" describe "$p" | tail -40 || true
+              echo "--- logs $p ---";          k3s kubectl -n "$NS" logs "$p" --all-containers --tail=60 || true
+              echo "--- logs $p (previous) ---"; k3s kubectl -n "$NS" logs "$p" --all-containers --previous --tail=40 2>/dev/null || true
+            done
+            echo "--- events ---";             k3s kubectl -n "$NS" get events --sort-by=.lastTimestamp | tail -40 || true
+            echo "===================================================="
+          }
+          roll() {  # roll <deployment> <timeout-seconds>
+            echo ">>> rollout: $1 (timeout ${2}s)"
+            if ! k3s kubectl -n "$NS" rollout status "deployment/$1" --timeout="${2}s"; then
+              echo "::error::deployment/$1 did not become available in ${2}s"
+              dump
+              exit 1
+            fi
+          }
+
           k3s kubectl apply -f /tmp/k8s/namespace.yaml
-          # Remove the retired Prometheus RBAC (cluster-scoped: `apply` in
-          # a namespace dir won't prune it).
+          # Retired Prometheus RBAC is cluster-scoped: `apply` in a namespace dir won't prune it.
           k3s kubectl delete clusterrole prometheus-cluster-role --ignore-not-found
           k3s kubectl delete clusterrolebinding prometheus-cluster-role-binding --ignore-not-found
+
+          # Warm the app image before its rollout wait, so that wait isn't
+          # racing containerd's parallel-pull queue (grafana/prometheus are
+          # ~hundreds of MB on a cold node). Non-fatal — the Deployment
+          # retries the pull anyway.
+          APP_IMG=$(grep -m1 -E '^\s*image:' /tmp/k8s/apps/web-deployment.yaml | awk '{print $2}')
+          [ -n "$APP_IMG" ] && (k3s ctr images pull "$APP_IMG" || echo "pre-pull of $APP_IMG failed, continuing")
+
           k3s kubectl apply -R -f /tmp/k8s/monitoring -f /tmp/k8s/apps
-          k3s kubectl -n world-cup-monitoring rollout status deployment/world-cup-web --timeout=180s
-          k3s kubectl -n world-cup-monitoring rollout status deployment/prometheus --timeout=180s
-          k3s kubectl -n world-cup-monitoring rollout status deployment/grafana --timeout=180s
+
+          roll world-cup-web 420
+          roll prometheus 300
+          roll grafana 300
+
           chmod +x /tmp/k8s/import-dashboards.sh
-          /tmp/k8s/import-dashboards.sh
+          /tmp/k8s/import-dashboards.sh || echo "::warning::dashboard import failed (app + monitoring are up)"
+
+          echo "--- final state ---"
+          k3s kubectl -n "$NS" get pods -o wide
           EOS
           )
           SCRIPT="${SCRIPT//__BUCKET__/$MANIFEST_BUCKET}"
@@ -265,16 +308,16 @@ jobs:
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "world-cup-monitor deploy $GITHUB_SHA" \
-            --timeout-seconds 900 \
+            --timeout-seconds 1800 \
             --parameters "$PAYLOAD" \
             --query 'Command.CommandId' --output text)
 
           echo "SSM command: $CMD_ID"
-          for i in $(seq 1 90); do
+          for i in $(seq 1 140); do
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
               --query 'Status' --output text 2>/dev/null || echo "Pending")
-            echo "Attempt $i/90: status=$STATUS"
+            echo "Attempt $i/140: status=$STATUS"
             if [ "$STATUS" = "Success" ]; then
               aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
                 --query 'StandardOutputContent' --output text
@@ -289,7 +332,7 @@ jobs:
                 --query 'StandardErrorContent' --output text
               exit 1
             fi
-            sleep 10
+            sleep 15
           done
           echo "SSM command did not finish in time." >&2
           exit 1
