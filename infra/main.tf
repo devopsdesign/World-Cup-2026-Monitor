@@ -282,7 +282,10 @@ resource "aws_instance" "k3s_server" {
     # K3s API is bound to localhost only — it is never reachable from
     # outside the instance. All kubectl access happens locally via SSM
     # Run Command, or via an SSM port-forward tunnel run on demand.
-    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --bind-address=127.0.0.1 --tls-san=127.0.0.1 --disable=servicelb --disable=traefik --disable=metrics-server --write-kubeconfig-mode 600 --kubelet-arg=fail-swap-on=false" sh -
+    # --resolv-conf: Ubuntu 22.04 runs systemd-resolved, so /etc/resolv.conf
+    # is the 127.0.0.53 stub — unreachable from the CoreDNS pod, which
+    # breaks ALL in-cluster DNS. Point k3s at the real upstream list.
+    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --bind-address=127.0.0.1 --tls-san=127.0.0.1 --disable=servicelb --disable=traefik --disable=metrics-server --write-kubeconfig-mode 600 --kubelet-arg=fail-swap-on=false --resolv-conf=/run/systemd/resolve/resolv.conf" sh -
 
     systemctl enable k3s
     systemctl start k3s
