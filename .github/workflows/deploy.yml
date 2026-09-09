@@ -270,7 +270,12 @@ jobs:
             fi
           done
 
-          aws s3 sync "s3://__BUCKET__/k8s" /tmp/k8s --delete
+          # Fresh pull every time. The node's apt awscli (v1) has a flaky
+          # s3-sync mtime heuristic — a new image tag is the same *length*
+          # as the old (40-hex SHA), so `sync` could leave the manifest
+          # stale and `kubectl apply` would report "unchanged".
+          rm -rf /tmp/k8s
+          aws s3 sync "s3://__BUCKET__/k8s" /tmp/k8s --delete --exact-timestamps
 
           dump() {
             echo "==================== DIAGNOSTICS ===================="
