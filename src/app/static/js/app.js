@@ -4,9 +4,12 @@ const el = {
   status: document.getElementById("connStatus"),
   statusText: document.getElementById("connStatusText"),
   heroSub: document.getElementById("heroSub"),
+  heroFinal: document.getElementById("heroFinal"),
   scorers: document.getElementById("scorerList"),
   knockout: document.getElementById("knockoutRounds"),
 };
+
+const abbr = (name) => (name || "").replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "—";
 
 const ROUND_ORDER = [
   "Round of 32",
@@ -52,6 +55,17 @@ function applyRecap(recap) {
     el.heroSub.textContent =
       `${recap.champion} beat ${recap.runner_up} ${recap.final.result} in the final at ` +
       `${recap.final.ground} — ${recap.total_goals} goals across ${recap.matches_played} matches.`;
+
+    if (el.heroFinal) {
+      el.heroFinal.replaceChildren();
+      const tag = document.createElement("small");
+      tag.textContent = "Final";
+      const line = document.createTextNode(
+        ` ${abbr(recap.final.team1 || recap.champion)} ${recap.final.result} ${abbr(recap.final.team2 || recap.runner_up)}`,
+      );
+      el.heroFinal.append(tag, line);
+      el.heroFinal.hidden = false;
+    }
   }
 
   renderScorers(Array.isArray(recap.top_scorers) ? recap.top_scorers : []);

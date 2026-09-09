@@ -3,29 +3,36 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
   <title>World Cup 2026 Recap</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Teko:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="preload" as="image" href="/img/hero.webp" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
-  <div class="stadium-glow" aria-hidden="true"></div>
+  <div class="pitch-bg" aria-hidden="true"></div>
 
   <header class="topbar">
     <div class="brand">
-      <span class="ball">⚽</span>
-      <span class="brand-text">WORLD CUP <strong>2026</strong> MONITOR</span>
+      <span class="ball" aria-hidden="true">⚽</span>
+      <span class="brand-text">WORLD&nbsp;CUP <strong>2026</strong> MONITOR</span>
     </div>
     <div class="status-pill" id="connStatus">
-      <span class="dot"></span> <span id="connStatusText">loading…</span>
+      <span class="dot" aria-hidden="true"></span> <span id="connStatusText">loading…</span>
     </div>
   </header>
 
   <main>
     <section class="hero">
-      <h1>World Cup 2026 — Tournament Recap</h1>
-      <p id="heroSub">The record book from all 104 matches across Canada, Mexico and the United States.</p>
+      <div class="hero__scrim" aria-hidden="true"></div>
+      <div class="hero__inner">
+        <p class="hero__kicker">FIFA World Cup 2026&nbsp;·&nbsp;Canada&nbsp;·&nbsp;Mexico&nbsp;·&nbsp;USA</p>
+        <h1>The Tournament,<br />in the Record Book</h1>
+        <p id="heroSub">Champions, Golden Boot, biggest wins and the full knockout bracket — from all 104 matches.</p>
+        <p class="hero__final" id="heroFinal" hidden></p>
+      </div>
     </section>
 
     <section class="stat-row" aria-label="Tournament records">
@@ -71,6 +78,24 @@
       </div>
     </section>
 
+    <section class="gallery" aria-label="Match-day gallery">
+      <figure class="shot">
+        <img src="/img/goal.webp" width="1000" height="560" loading="lazy" decoding="async"
+             alt="A goal celebration in the Milan derby, AC Milan v Inter Milan, Serie A 1974–75." />
+        <figcaption><span>The goal</span> Milan derby · 1974–75</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="/img/intl.webp" width="1000" height="667" loading="lazy" decoding="async"
+             alt="International match action: Israel v Argentina at Ramat Gan, 1990." />
+        <figcaption><span>The stage</span> Israel v Argentina · 1990</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="/img/pitch.webp" width="1000" height="667" loading="lazy" decoding="async"
+             alt="Floodlit pitch action, Dynamo Kyiv v Polissya, 2020." />
+        <figcaption><span>Match day</span> Under the lights</figcaption>
+      </figure>
+    </section>
+
     <section class="pitch">
       <h2>Golden Boot Race</h2>
       <ol id="scorerList" class="scorer-list">
@@ -88,6 +113,11 @@
 
   <footer>
     <p>Metrics: <code>/metrics</code> · API: <code>/api/tournament</code> · Data: <code>openfootball/worldcup.json</code></p>
+    <p class="credits">
+      Match photos via <a href="https://commons.wikimedia.org/" rel="noopener">Wikimedia Commons</a> —
+      public domain &amp; <a href="https://creativecommons.org/licenses/by-sa/4.0/" rel="noopener">CC&nbsp;BY-SA</a>
+      (N. Alpert, O. Shcherbytska, Dynamomania.com), resized for the web. See <code>static/img/CREDITS.md</code>.
+    </p>
   </footer>
 
   <script src="/js/app.js"></script>
