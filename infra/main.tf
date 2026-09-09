@@ -283,11 +283,6 @@ resource "aws_instance" "k3s_server" {
     # sure it's enabled so Session Manager / Run Command work immediately.
     snap start amazon-ssm-agent || systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || true
 
-    # Kubernetes audit policy (metadata-level, read-noise dropped),
-    # written before k3s starts so the apiserver can load it.
-    mkdir -p /var/lib/rancher/k3s/server
-    echo 'YXBpVmVyc2lvbjogYXVkaXQuazhzLmlvL3YxCmtpbmQ6IFBvbGljeQpvbWl0U3RhZ2VzOgogIC0gUmVxdWVzdFJlY2VpdmVkCnJ1bGVzOgogIC0gbGV2ZWw6IE5vbmUKICAgIHZlcmJzOiBbImdldCIsICJsaXN0IiwgIndhdGNoIl0KICAtIGxldmVsOiBOb25lCiAgICByZXNvdXJjZXM6CiAgICAgIC0gZ3JvdXA6ICIiCiAgICAgICAgcmVzb3VyY2VzOiBbImV2ZW50cyIsICJlbmRwb2ludHMiLCAiZW5kcG9pbnRzbGljZXMiLCAibGVhc2VzIl0KICAtIGxldmVsOiBNZXRhZGF0YQo=' | base64 -d > /var/lib/rancher/k3s/server/audit.yaml
-
     # The Kubernetes API is kept private by the security group (no 6443
     # ingress rule anywhere) — NOT by binding the apiserver to loopback.
     # `--bind-address=127.0.0.1` makes the in-cluster `kubernetes` service
@@ -298,13 +293,16 @@ resource "aws_instance" "k3s_server" {
     # is the 127.0.0.53 stub — unreachable from the CoreDNS pod. Point k3s
     # at the real upstream resolver list instead.
     #
-    # Hardening (CIS Kubernetes Benchmark, all free):
+    # Hardening (CIS Kubernetes Benchmark) — only zero-runtime-cost flags
+    # here. API audit logging is a documented opt-in (docs/SECURITY.md):
+    # its default `blocking` mode fsyncs per request and stalls the
+    # apiserver on a swapping t3.micro; enable it (in `batch` mode) once
+    # the node has headroom.
     #   --secrets-encryption      encrypt Secrets at rest in etcd
-    #   audit-log-*               metadata audit trail, capped at 20 MB
     #   profiling=false           disable pprof on apiserver/cm/scheduler
     #   service-account-lookup    reject tokens of deleted ServiceAccounts
     #   streaming-...idle-timeout close idle exec/attach streams
-    K3S_ARGS="server --tls-san=127.0.0.1 --disable=servicelb --disable=traefik --disable=metrics-server --write-kubeconfig-mode 600 --kubelet-arg=fail-swap-on=false --resolv-conf=/run/systemd/resolve/resolv.conf --secrets-encryption --kube-apiserver-arg=audit-policy-file=/var/lib/rancher/k3s/server/audit.yaml --kube-apiserver-arg=audit-log-path=/var/lib/rancher/k3s/server/audit.log --kube-apiserver-arg=audit-log-maxage=7 --kube-apiserver-arg=audit-log-maxbackup=2 --kube-apiserver-arg=audit-log-maxsize=10 --kube-apiserver-arg=profiling=false --kube-apiserver-arg=service-account-lookup=true --kube-controller-manager-arg=profiling=false --kube-scheduler-arg=profiling=false --kubelet-arg=streaming-connection-idle-timeout=5m"
+    K3S_ARGS="server --tls-san=127.0.0.1 --disable=servicelb --disable=traefik --disable=metrics-server --write-kubeconfig-mode 600 --kubelet-arg=fail-swap-on=false --resolv-conf=/run/systemd/resolve/resolv.conf --secrets-encryption --kube-apiserver-arg=profiling=false --kube-apiserver-arg=service-account-lookup=true --kube-controller-manager-arg=profiling=false --kube-scheduler-arg=profiling=false --kubelet-arg=streaming-connection-idle-timeout=5m"
     curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="$K3S_ARGS" sh -
 
     systemctl enable --now k3s

@@ -99,7 +99,7 @@ IAM role ──▶ SSM Run Command ─▶ node (`k3s kubectl` locally) ─▶ AP
 | Control | Flag / step | Standard |
 |---|---|---|
 | Secrets encrypted at rest in etcd | `--secrets-encryption` | CIS 3.1.1 |
-| API audit log (metadata level, read-noise dropped), capped 20 MB | `--kube-apiserver-arg=audit-*` + `/var/lib/rancher/k3s/server/audit.yaml` | CIS 3.2.x |
+| API audit log — **opt-in** (see backlog #2); off by default because `blocking` mode fsyncs per request and stalls the apiserver on a swapping `t3.micro` | — | CIS 3.2.x |
 | pprof disabled on apiserver / controller-manager / scheduler | `--*-arg=profiling=false` | CIS 1.2.x/1.3.x/1.4.x |
 | Tokens of deleted ServiceAccounts rejected | `--kube-apiserver-arg=service-account-lookup=true` | CIS 1.2.x |
 | Idle exec/attach streams closed | `--kubelet-arg=streaming-connection-idle-timeout=5m` | CIS 4.2.5 |
@@ -230,12 +230,23 @@ Ordered by value-for-effort, all still ~$0 unless noted:
 
 1. **Raise `enforce` to `restricted`** in `k8s/namespace.yaml` — every workload
    already complies; flip one label.
-2. **`var.enable_cloudtrail = true`** — durable API logging (~$0.05/mo of S3).
-3. **`var.lock_default_security_group = true`** — CIS 5.4, if nothing else uses the default VPC.
-4. **Digest-pin the app image** — resolve `python:3.11.9-slim@sha256:…` (see the Dockerfile) and pin the CI-built image by digest in the manifest.
-5. **`--require-hashes` Python install** — `pip-compile --generate-hashes` a lockfile.
-6. **CloudFront + ACM in front of the app** — real TLS, HTTP→HTTPS, and a place to
+2. **K8s API audit logging** — high value, but its default `blocking` mode fsyncs
+   an event per request and stalls the apiserver on this swapping `t3.micro`.
+   Enable it on a larger node, in **`batch`** mode, by appending to `K3S_ARGS`:
+   ```
+   --kube-apiserver-arg=audit-policy-file=/var/lib/rancher/k3s/server/audit.yaml
+   --kube-apiserver-arg=audit-log-path=/var/lib/rancher/k3s/server/audit.log
+   --kube-apiserver-arg=audit-log-mode=batch
+   --kube-apiserver-arg=audit-log-batch-max-wait=5s
+   --kube-apiserver-arg=audit-log-maxsize=10 --kube-apiserver-arg=audit-log-maxbackup=2 --kube-apiserver-arg=audit-log-maxage=7
+   ```
+   with a metadata-level policy written to that path before k3s starts.
+3. **`var.enable_cloudtrail = true`** — durable API logging (~$0.05/mo of S3).
+4. **`var.lock_default_security_group = true`** — CIS 5.4, if nothing else uses the default VPC.
+5. **Digest-pin the app image** — resolve `python:3.11.9-slim@sha256:…` (see the Dockerfile) and pin the CI-built image by digest in the manifest.
+6. **`--require-hashes` Python install** — `pip-compile --generate-hashes` a lockfile.
+7. **CloudFront + ACM in front of the app** — real TLS, HTTP→HTTPS, and a place to
    attach AWS WAF later. Low-traffic cost is within the CloudFront free tier.
-7. **Restrict `grafana_nodeport_cidr`** to your own `/32` if Grafana doesn't need to be public.
-8. **kube-bench** as a one-shot Job to score the node against the CIS Kubernetes Benchmark.
-9. **Trivy** image + IaC scan as a CI job (`ci.yml`).
+8. **Restrict `grafana_nodeport_cidr`** to your own `/32` if Grafana doesn't need to be public.
+9. **kube-bench** as a one-shot Job to score the node against the CIS Kubernetes Benchmark.
+10. **Trivy** image + IaC scan as a CI job (`ci.yml`).
