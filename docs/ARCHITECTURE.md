@@ -23,7 +23,7 @@ flowchart TB
 
     subgraph GH["GitHub"]
         repo["Repo: main branch"]
-        gha["Actions: deploy.yml / cleanup.yml / ci.yml"]
+        gha["Actions: deploy.yml / destroy.yml / ci.yml"]
         ghenv["Environment 'production'<br/>secret: GRAFANA_ADMIN_PASSWORD"]
         repo --> gha
         ghenv -.-> gha
@@ -135,7 +135,7 @@ runs on the node itself, driven by SSM. `6443` has no security-group ingress rul
 | **node-exporter** | `prom/node-exporter` (pin) | `kube-system` | ClusterIP (`:9100`) | DaemonSet, `hostNetwork`/`hostPID` — isolated from the app namespace so PSA can be strict there. |
 | **CoreDNS / local-path / flannel** | K3s built-ins | `kube-system` | — | K3s ships these; Traefik / servicelb / metrics-server are disabled. |
 | **Infra** | Terraform ≥ 1.9 | — | — | `infra/bootstrap` (admin, account-level) + `infra/` (CI, per-deploy). |
-| **CI/CD** | GitHub Actions | — | — | `deploy.yml`, `cleanup.yml`, `ci.yml`; OIDC, SHA-pinned actions, protected environment. |
+| **CI/CD** | GitHub Actions | — | — | `deploy.yml`, `destroy.yml`, `ci.yml`; OIDC, SHA-pinned actions, protected environment. |
 
 ---
 
@@ -198,5 +198,5 @@ built-in kube-router controller.
 | **One consolidated app pod** (frontend + API + metrics) | Three pods don't fit comfortably on 1 GiB alongside Prometheus + Grafana. |
 | **Static dataset (`openfootball/worldcup.json`)** | The old live source (`worldcupjson.net`) was abandoned and the domain repurposed. A public, versioned, static file needs no key and no rate-limit handling. |
 | **`credit_specification = standard`** | A runaway workload throttles to baseline instead of silently billing for T3-Unlimited. |
-| **`cleanup.yml` verifies a clean account** | "Tear it down between demos" has to be trustworthy, or the Free-Tier promise is a lie. |
+| **`destroy.yml` verifies a clean account** | "Tear it down between demos" has to be trustworthy, or the Free-Tier promise is a lie. |
 | **PSA `baseline` (not `restricted`) enforced** | Everything already meets `restricted`, but `baseline`-enforce + `restricted`-audit is a safe default that can't block a deploy; flip one label to tighten. |

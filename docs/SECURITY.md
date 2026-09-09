@@ -84,13 +84,13 @@ IAM role ──▶ SSM Run Command ─▶ node (`k3s kubectl` locally) ─▶ AP
 | Control | Where |
 |---|---|
 | `permissions:` is least-privilege (`contents: read`, `id-token: write` only where needed) | all workflows |
-| `concurrency` group shared by deploy + cleanup — they can never race | `deploy.yml`, `cleanup.yml` |
+| `concurrency` group shared by deploy + destroy — they can never race | `deploy.yml`, `destroy.yml` |
 | `apply` / `destroy` gated on the protected `production` environment | job `environment:` |
 | Every third-party Action pinned to a commit SHA; kept fresh by Dependabot | `.github/dependabot.yml` |
 | Every workflow input / secret passed via `env:` — never interpolated into a `run:` string | all workflows |
 | `pytest` runs on PRs (`ci.yml`) and gates `build`/`deploy` (`deploy.yml` `test` job) | — |
-| Cleanup never enumerates the account — it discovers names from Terraform state and acts on them by name | `cleanup.yml` |
-| Cleanup's `Verify the account is clean` step is the sole pass/fail; fails on any leftover | `cleanup.yml` |
+| Destroy never enumerates the account — it discovers names from Terraform state and acts on them by name | `destroy.yml` |
+| Destroy's `Verify the account is clean` step is the sole pass/fail; fails on any leftover | `destroy.yml` |
 | App image built in CI and deployed **by immutable digest/SHA tag**, never `:latest` | `deploy.yml` |
 | Manifests + Grafana secret staged to a private, 1-day-lifecycle, SSE-KMS S3 bucket, then pulled and applied **on the node** via SSM — the K8s API is never exposed to the runner | `deploy.yml` |
 
@@ -150,7 +150,7 @@ IAM role ──▶ SSM Run Command ─▶ node (`k3s kubectl` locally) ─▶ AP
 - Instance type validated to `t2.micro` / `t3.micro` only (`variable "instance_type"` validation).
 - `aws_budgets_budget` emails at 80% actual and 100% forecast of a $1 threshold.
 - DynamoDB lock table is `PAY_PER_REQUEST`; buckets have lifecycle expiry; no NAT / ALB / EIP / extra EBS.
-- `cleanup.yml` is bulletproof and verifies a clean account, so "tear it down between demos" is reliable.
+- `destroy.yml` is bulletproof and verifies a clean account, so "tear it down between demos" is reliable.
 
 ---
 
@@ -209,7 +209,7 @@ grep -rn "aws-access-key-id\|AWS_SECRET" .github/workflows/    # → nothing
     --parameters '{"portNumber":["6443"],"localPortNumber":["6443"]}'
   # then use a kubeconfig pointed at https://127.0.0.1:6443 (copy /etc/rancher/k3s/k3s.yaml via SSM)
   ```
-- **Suspected node compromise** — run `cleanup.yml` (it verifies a clean account),
+- **Suspected node compromise** — run `destroy.yml` (it verifies a clean account),
   rotate the `GRAFANA_ADMIN_PASSWORD` environment secret, then redeploy. The node
   holds no long-lived credential — only the instance-profile role (SSM core + read
   on one S3 prefix) and a ≤6 h IMDS token.

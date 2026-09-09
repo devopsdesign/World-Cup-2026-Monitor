@@ -1,7 +1,16 @@
-name: Cleanup Infrastructure (Bulletproof)
+name: Destroy — teardown all AWS resources
 
-# Tears down everything infra/main.tf creates and guarantees a clean
-# account afterwards.
+# Manual, one-click teardown to stop all spend between demos. Tears down
+# everything infra/main.tf creates — compute (EC2), storage (EBS root
+# volume, the manifest S3 bucket), networking (security group), the
+# instance profile / node role, and the $1 Budgets alarm — and then
+# proves the account is clean.
+#
+# What it does NOT remove (account-level, created by infra/bootstrap and
+# themselves free): the Terraform state bucket, the DynamoDB lock table,
+# the KMS key, and the OIDC deploy role. Those cost nothing at rest and
+# are needed to deploy again. Run `terraform -chdir=infra/bootstrap
+# destroy` by hand if you are decommissioning the project entirely.
 #
 # The OIDC deploy role is resource-scoped and CANNOT run account-wide
 # `list` calls (s3:ListAllMyBuckets, iam:ListRoles, ...). So this
@@ -24,7 +33,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type "DELETE_ALL" to confirm cleanup'
+        description: 'Type DELETE_ALL to confirm teardown of all AWS resources'
         required: true
         type: string
         default: ""
@@ -43,7 +52,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  cleanup:
+  teardown:
     runs-on: ubuntu-latest
     environment: production
     env:

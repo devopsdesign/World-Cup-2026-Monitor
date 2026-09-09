@@ -70,7 +70,7 @@ The short version:
 - **NetworkPolicy** — default-deny + explicit allows, **enforced** by K3s's built-in controller.
 - **App** — strict CSP + security headers on every response, docs endpoints disabled, third-party data rendered as text only, upstream fetched server-side with bounded timeouts.
 - **AWS account** (`infra/bootstrap`) — default EBS encryption, account-wide S3 Block Public Access, IAM Access Analyzer, IAM password policy, KMS-encrypted/versioned/TLS-only state bucket.
-- **Cost** — `cpu_credits = "standard"` (no T3-Unlimited surprise), instance-type validation, `$1` Budgets alarm, a `cleanup.yml` that verifies a clean account.
+- **Cost** — `cpu_credits = "standard"` (no T3-Unlimited surprise), instance-type validation, `$1` Budgets alarm, a `destroy.yml` that verifies a clean account.
 
 ---
 
@@ -129,57 +129,78 @@ The short version:
 
 ---
 
-## Deploying
+## Lifecycle — deploy & destroy, both manual
 
-Push to `main`, or run **Actions → Deploy K3s + Monitoring Stack
-(Hardened) → Run workflow** with `action: apply`. The pipeline:
-builds & pushes the app image → `terraform apply` → waits for the SSM
-agent → stages rendered manifests to a private S3 bucket → applies them
-via `aws ssm send-command` running `k3s kubectl` **locally on the
-node** → waits for rollouts → imports Grafana dashboards → writes a
-summary to the workflow run.
+Two workflows, both `workflow_dispatch` so you drive them from the Actions
+tab. They share a `concurrency` group, so a deploy and a destroy can never
+overlap.
 
-### 🔗 Where to find your live URL
+| Workflow | File | What it does |
+|---|---|---|
+| **Deploy K3s + Monitoring Stack (Hardened)** | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | Build image → `terraform apply` → apply manifests on the node via SSM → wait for rollouts → import dashboards |
+| **Destroy — teardown all AWS resources** | [`.github/workflows/destroy.yml`](.github/workflows/destroy.yml) | `terraform destroy` (retried) + a name-targeted AWS sweep + a "verify the account is clean" gate |
 
-The workflow does not (and should not) hardcode a public IP — EC2
-gives the instance a new one on every `apply`. After a successful run:
+Prerequisite (one time): [One-time setup](#one-time-setup-per-aws-account)
+must be done — the OIDC role, repo variables, and the `production`
+environment secret.
 
-1. Open the finished **Deploy** run in the **Actions** tab.
-2. Read the **Summary** panel (or the `Read Terraform outputs` step's
-   output) for `ec2_public_ip`.
-3. Your app is live at:
+### A) Trigger **Deploy** manually
+
+1. GitHub → **Actions** tab → left sidebar → **Deploy K3s + Monitoring Stack (Hardened)**.
+2. **Run workflow** ▸ Branch: `main` ▸ **Terraform action**: `apply` ▸ **Run workflow**.
+3. If the `production` environment has required reviewers, approve the run when prompted.
+4. Wait ~5–9 min (fresh infra) or ~1–2 min (redeploy onto a running instance).
+5. Open the finished run → **Summary** panel for the live URLs, or read the
+   `Read Terraform outputs` step for `ec2_public_ip`:
+   - App: `http://<ec2_public_ip>:30080/`
+   - Grafana: `http://<ec2_public_ip>:30030/` — user `admin`, password = your `GRAFANA_ADMIN_PASSWORD` environment secret.
+
+   Or from the CLI (needs the OIDC role configured locally):
+   ```bash
+   aws ec2 describe-instances      --filters "Name=tag:Name,Values=world-cup-monitor-k3s-server" "Name=instance-state-name,Values=running"      --query 'Reservations[0].Instances[0].PublicIpAddress' --output text
    ```
-   http://<ec2_public_ip>:30080/
-   ```
-   Grafana: `http://<ec2_public_ip>:30030/` (user `admin`, password =
-   your `GRAFANA_ADMIN_PASSWORD` secret).
 
-If you'd rather not open the Actions UI, get it from the CLI once you
-have the OIDC role configured locally:
+Pushing to `main` also runs Deploy automatically (the `[skip ci]` marker
+in a commit message skips it).
+
+**Ad-hoc `kubectl` / PromQL** without opening any port:
 ```bash
-aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=world-cup-monitor-k3s-server" "Name=instance-state-name,Values=running" \
-  --query 'Reservations[0].Instances[0].PublicIpAddress' --output text
+aws ssm start-session --target <instance-id>   --document-name AWS-StartPortForwardingSession   --parameters '{"portNumber":["9090"],"localPortNumber":["9090"]}'
+# browse http://localhost:9090
 ```
 
-**Ad-hoc kubectl/PromQL access** (optional, no open ports required):
+### B) Trigger **Destroy** manually (stop all spend)
+
+1. GitHub → **Actions** tab → left sidebar → **Destroy — teardown all AWS resources**.
+2. **Run workflow** ▸ Branch: `main`.
+3. **confirm**: type `DELETE_ALL` exactly (the run fails fast otherwise).
+   Leave **project_name** as `world-cup-monitor`.
+4. **Run workflow** ▸ approve if the `production` environment prompts.
+5. Wait ~1–2 min. A green run means the `Verify the account is clean` step
+   found **no** `world-cup-monitor-*` instance, security group, staging
+   bucket, or node role left — and the workflow **Summary** confirms it.
+
+Removed: EC2 instance + its EBS root volume, security group, IAM instance
+profile + node role, the manifest S3 bucket, the `$1` Budgets alarm.
+**Kept** (account-level, from `infra/bootstrap`, free at rest): the
+Terraform state bucket, the DynamoDB lock table, the KMS key, and the
+OIDC deploy role — so you can redeploy any time. To wipe those too:
 ```bash
-aws ssm start-session --target <instance-id> \
-  --document-name AWS-StartPortForwardingSession \
-  --parameters '{"portNumber":["9090"],"localPortNumber":["9090"]}'
-# then browse http://localhost:9090
+terraform -chdir=infra/bootstrap destroy   -var="github_owner=<owner>" -var="github_repo=World-Cup-2026-Monitor"
 ```
 
-## Tearing down
+### Typical demo loop
 
-**Actions → Cleanup Infrastructure (Bulletproof) → Run workflow**,
-type `DELETE_ALL` to confirm. This destroys the EC2 instance, its
-security group/volumes, and the manifest-staging S3 bucket. The
-Terraform state bucket, lock table, and GitHub OIDC role from
-`infra/bootstrap` are account-level and are deliberately **not**
-deleted by this workflow — remove them yourself via
-`terraform destroy` in `infra/bootstrap` only when decommissioning the
-project for good.
+```
+Deploy (apply)  ──▶  demo at http://<ip>:30080  ──▶  Destroy (DELETE_ALL)  ──▶  $0
+        ▲                                                     │
+        └──────────────────  repeat any time  ◀───────────────┘
+```
+
+Free-Tier note: while deployed this is one `t3.micro` (750 h/mo free) with
+`cpu_credits = "standard"` so it throttles instead of billing, a 20 GB gp3
+root volume, and two small S3 buckets with lifecycle expiry. Destroy
+between demos and the standing cost is **$0**.
 
 ---
 
