@@ -196,7 +196,7 @@ jobs:
 
       - name: Setup kubectl (client only — no cluster access from the runner)
         if: env.TF_ACTION == 'apply'
-        uses: azure/setup-kubectl@3e0aec4d80787158d308d7b364cb1b702e7feb7f # v4.0.0
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
 
       - name: Render manifests
         if: env.TF_ACTION == 'apply'
