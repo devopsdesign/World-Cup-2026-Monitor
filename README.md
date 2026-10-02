@@ -74,6 +74,17 @@ The short version:
 
 ---
 
+> **Status (2026-10-02): fully torn down.** Both the per-deploy stack
+> (`destroy.yml`) and the bootstrap stack (`terraform -chdir=infra/bootstrap
+> destroy`) have been removed, so the AWS footprint is **$0** — the only
+> remnant is the state-encryption KMS key, pending deletion until 2026-10-09
+> (not billed while pending). Kept on purpose, all free: default EBS
+> encryption, account-wide S3 Block Public Access, IAM Access Analyzer, the
+> IAM password policy. **To bring it back:** run step 1 below (it recreates
+> the same `…-gha-deploy` role ARN, so the `AWS_ROLE_ARN` repo variable stays
+> valid), then dispatch **Deploy**. Until bootstrap is re-applied, any push to
+> `main` will fail at the OIDC step — commit with `[skip ci]` meanwhile.
+
 ## One-time setup (per AWS account)
 
 1. **Bootstrap the backend + OIDC role + account security baseline**
