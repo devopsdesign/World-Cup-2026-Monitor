@@ -204,6 +204,15 @@ between demos and the standing cost is **$0**.
 
 ---
 
+## Also in this repo: Golazo landing-page prototype
+
+[`src/golazo/`](src/golazo/) is a standalone static landing page for a
+soccer-app concept ("Golazo") — HTML/CSS/JS only, bilingual ES/EN, with a
+3-step onboarding wizard and sample stats. It is **not** wired into the
+deployed app or the AWS stack; preview it with
+`cd src/golazo && python3 -m http.server 8080`. See
+[src/golazo/README.md](src/golazo/README.md).
+
 ## Repo layout
 
 ```

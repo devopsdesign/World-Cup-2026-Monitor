@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <!-- CUSTOMIZE: page title + description target local search intent -->
+  <title>Golazo — App para organizar torneos y estadísticas de fútbol amateur</title>
+  <meta name="description" content="Golazo es la app para jugadores, DTs y organizadores de ligas locales: estadísticas en vivo, organizador de torneos, red de jugadores, MVP y highlights. Descárgala gratis." />
+  <meta name="keywords" content="app para organizar torneos de futbol, estadisticas de futbol amateur, liga local, app futbol, organizador de ligas" />
+  <meta property="og:title" content="Golazo — Domina la Cancha. Conecta con tu Pasión." />
+  <meta property="og:description" content="La plataforma definitiva para gestionar partidos, estadísticas de jugador y ligas locales." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="img/hero.webp" />
+  <meta name="theme-color" content="#0D1117" />
+  <!-- Strict CSP: only same-origin assets + Google Fonts. JSON-LD below is
+       data, not executed script, so it is not affected. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="preload" as="image" href="img/hero.webp" />
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- SEO: SoftwareApplication schema. CUSTOMIZE: name, URLs, rating
+       (replace the sample aggregateRating with real store data or remove it). -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Golazo",
+    "applicationCategory": "SportsApplication",
+    "operatingSystem": "iOS, Android, Web",
+    "description": "App para gestionar partidos, estadísticas de jugador y ligas locales de fútbol amateur.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.8", "ratingCount": "1200" }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main" data-i18n="skip">Saltar al contenido</a>
+
+  <!-- ===================== NAV ===================== -->
+  <header class="nav" id="top">
+    <div class="container nav__inner">
+      <!-- CUSTOMIZE: logo — swap the SVG for your brand mark -->
+      <a class="logo" href="#top" aria-label="Golazo — inicio">
+        <svg class="logo__mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M16 6l6 4.4-2.3 7H12.3L10 10.4z" fill="currentColor"/><path d="M8 20l4.3-2.6M24 20l-4.3-2.6M16 26v-4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <span class="logo__word">GOLAZO</span>
+      </a>
+
+      <nav class="nav__links" id="navLinks" aria-label="Principal">
+        <a href="#features" data-i18n="nav.features">Funciones</a>
+        <a href="#stats" data-i18n="nav.stats">Motor de stats</a>
+        <a href="#modules" data-i18n="nav.tournaments">Torneos</a>
+        <a href="#faq" data-i18n="nav.pricing">Precios</a>
+        <a href="#register" class="btn btn--primary btn--sm" data-i18n="nav.join">Unirse Gratis</a>
+      </nav>
+
+      <div class="nav__tools">
+        <button class="lang-toggle" id="langToggle" type="button" aria-label="Cambiar idioma / Switch language">
+          <span data-lang="es" class="is-active">ES</span><span aria-hidden="true">/</span><span data-lang="en">EN</span>
+        </button>
+        <button class="hamburger" id="hamburger" type="button" aria-expanded="false" aria-controls="navLinks" aria-label="Abrir menú">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ===================== 1. HERO ===================== -->
+    <section class="hero" aria-labelledby="heroTitle">
+      <!-- CUSTOMIZE: swap img/hero.webp (or a muted looping video) -->
+      <div class="hero__media" aria-hidden="true"></div>
+      <div class="hero__scrim" aria-hidden="true"></div>
+      <div class="container hero__inner reveal">
+        <p class="eyebrow" data-i18n="hero.eyebrow">Fútbol amateur · ligas locales · comunidad</p>
+        <h1 id="heroTitle" class="display" data-i18n="hero.title">Domina la Cancha.<br />Conecta con tu Pasión.</h1>
+        <p class="lead" data-i18n="hero.sub">La plataforma definitiva para gestionar partidos, estadísticas de jugador y ligas locales.</p>
+        <div class="hero__cta">
+          <!-- CUSTOMIZE: primary CTA destination (store link or #register) -->
+          <a href="#register" class="btn btn--primary btn--lg" data-i18n="hero.cta1">Descargar la App</a>
+          <a href="#modules" class="btn btn--ghost btn--lg" data-i18n="hero.cta2">Ver Demostración</a>
+        </div>
+        <ul class="trust" aria-label="Cifras de confianza">
+          <li><strong data-count="48000" data-suffix="+">0</strong><span data-i18n="trust.players">jugadores activos</span></li>
+          <li><strong data-count="310000" data-suffix="+">0</strong><span data-i18n="trust.matches">partidos registrados</span></li>
+          <li><strong data-count="1200" data-suffix="+">0</strong><span data-i18n="trust.leagues">ligas aliadas</span></li>
+          <li><strong>4.8<span class="star" aria-hidden="true">★</span></strong><span data-i18n="trust.rating">en App Store y Google Play</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===================== 2. FEATURES STRIP ===================== -->
+    <section class="section features" id="features" aria-labelledby="featTitle">
+      <div class="container">
+        <h2 id="featTitle" class="h2 reveal" data-i18n="feat.title">Todo lo que pasa en la cancha, en tu bolsillo</h2>
+        <div class="feature-strip">
+          <!-- Each card links to its module in section 4. CUSTOMIZE icons/copy. -->
+          <a class="fcard reveal" href="#modules" data-tab="players">
+            <span class="fcard__icon" aria-hidden="true">⚡</span>
+            <span class="fcard__title" data-i18n="feat.live">Estadísticas en Vivo</span>
+            <span class="fcard__desc" data-i18n="feat.live.d">Goles, asistencias y minutos, al instante.</span>
+          </a>
+          <a class="fcard reveal" href="#modules" data-tab="organizers">
+            <span class="fcard__icon" aria-hidden="true">🏆</span>
+            <span class="fcard__title" data-i18n="feat.league">Organizador de Ligas</span>
+            <span class="fcard__desc" data-i18n="feat.league.d">Fixture, tablas y sanciones automáticas.</span>
+          </a>
+          <a class="fcard reveal" href="#modules" data-tab="players">
+            <span class="fcard__icon" aria-hidden="true">🤝</span>
+            <span class="fcard__title" data-i18n="feat.network">Red de Jugadores</span>
+            <span class="fcard__desc" data-i18n="feat.network.d">Encuentra equipo o completa el tuyo.</span>
+          </a>
+          <a class="fcard reveal" href="#modules" data-tab="fans">
+            <span class="fcard__icon" aria-hidden="true">🎯</span>
+            <span class="fcard__title" data-i18n="feat.mvp">Puntajes y MVP</span>
+            <span class="fcard__desc" data-i18n="feat.mvp.d">Vota al mejor de cada partido.</span>
+          </a>
+          <a class="fcard reveal" href="#modules" data-tab="organizers">
+            <span class="fcard__icon" aria-hidden="true">📍</span>
+            <span class="fcard__title" data-i18n="feat.venues">Gestión de Canchas</span>
+            <span class="fcard__desc" data-i18n="feat.venues.d">Reserva y agenda sin choques.</span>
+          </a>
+          <a class="fcard reveal" href="#modules" data-tab="fans">
+            <span class="fcard__icon" aria-hidden="true">🎬</span>
+            <span class="fcard__title" data-i18n="feat.video">Highlights en Video</span>
+            <span class="fcard__desc" data-i18n="feat.video.d">Tus mejores jugadas, listas para compartir.</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 3. HOW IT WORKS ===================== -->
+    <section class="section how" id="how" aria-labelledby="howTitle">
+      <div class="container">
+        <h2 id="howTitle" class="h2 reveal" data-i18n="how.title">De cero a tu primer torneo en cuatro pasos</h2>
+        <ol class="timeline">
+          <li class="step reveal">
+            <span class="step__num" aria-hidden="true">01</span>
+            <span class="step__icon" aria-hidden="true">👤</span>
+            <h3 data-i18n="how.1">Crea tu Perfil</h3>
+            <p data-i18n="how.1.d">Posición, pierna hábil, ciudad. Listo en 60 segundos.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step__num" aria-hidden="true">02</span>
+            <span class="step__icon" aria-hidden="true">🛡️</span>
+            <h3 data-i18n="how.2">Arma tu Equipo o Liga</h3>
+            <p data-i18n="how.2.d">Invita por WhatsApp. Golazo arma el fixture por ti.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step__num" aria-hidden="true">03</span>
+            <span class="step__icon" aria-hidden="true">⚽</span>
+            <h3 data-i18n="how.3">Registra Jugadas y Goles</h3>
+            <p data-i18n="how.3.d">Un toque por evento. Funciona sin señal y sincroniza después.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step__num" aria-hidden="true">04</span>
+            <span class="step__icon" aria-hidden="true">📈</span>
+            <h3 data-i18n="how.4">Analiza tu Rendimiento</h3>
+            <p data-i18n="how.4.d">Mapas de calor, rachas y comparativas por temporada.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ===================== 4. APP MODULES (TABS) ===================== -->
+    <section class="section modules" id="modules" aria-labelledby="modTitle">
+      <div class="container">
+        <h2 id="modTitle" class="h2 reveal" data-i18n="mod.title">Un Golazo para cada rol</h2>
+
+        <div class="tabs reveal" role="tablist" aria-label="Tipo de usuario">
+          <button role="tab" id="tab-players" aria-selected="true" aria-controls="panel-players" data-i18n="mod.tab.players">Para Jugadores</button>
+          <button role="tab" id="tab-coaches" aria-selected="false" aria-controls="panel-coaches" tabindex="-1" data-i18n="mod.tab.coaches">Para DTs / Entrenadores</button>
+          <button role="tab" id="tab-organizers" aria-selected="false" aria-controls="panel-organizers" tabindex="-1" data-i18n="mod.tab.organizers">Para Organizadores de Ligas</button>
+          <button role="tab" id="tab-fans" aria-selected="false" aria-controls="panel-fans" tabindex="-1" data-i18n="mod.tab.fans">Para Aficionados</button>
+        </div>
+
+        <!-- Each panel: mockup + copy + metric + link. CUSTOMIZE mockups with real screenshots. -->
+        <div class="panel reveal" role="tabpanel" id="panel-players" aria-labelledby="tab-players">
+          <div class="module">
+            <div class="mock"><div class="mock__screen mock__screen--stats"><span class="mock__chip">⚡ LIVE</span><strong>7</strong><em data-i18n="mock.goals">goles esta temporada</em><i class="mock__bar" style="--w:78%"></i><i class="mock__bar" style="--w:54%"></i><i class="mock__bar" style="--w:92%"></i></div></div>
+            <div class="module__body">
+              <h3 data-i18n="mod.players.h">Tu carrera amateur, con números de pro</h3>
+              <p data-i18n="mod.players.p">Perfil con goles, asistencias, tarjetas y MVPs. Comparte tu ficha y recibe invitaciones de equipos cerca de ti.</p>
+              <p class="metric" data-i18n="mod.players.m">El 92% de los capitanes ahorra más de 3 horas semanales en la gestión de su equipo.</p>
+              <a href="#register" class="link" data-i18n="mod.explore">Explorar →</a>
+            </div>
+          </div>
+        </div>
+        <div class="panel" role="tabpanel" id="panel-coaches" aria-labelledby="tab-coaches" hidden>
+          <div class="module">
+            <figure class="module__photo"><img src="img/coach.webp" width="1000" height="667" loading="lazy" decoding="async" alt="Entrenador dirigiendo una sesión de entrenamiento" /></figure>
+            <div class="module__body">
+              <h3 data-i18n="mod.coaches.h">Alineaciones, cargas y minutos — sin planillas</h3>
+              <p data-i18n="mod.coaches.p">Arma el once en segundos, controla minutos por jugador y detecta quién llega cansado al fin de semana.</p>
+              <p class="metric" data-i18n="mod.coaches.m">Mapas de calor y comparativas por posición en cada partido.</p>
+              <a href="#register" class="link" data-i18n="mod.explore">Explorar →</a>
+            </div>
+          </div>
+        </div>
+        <div class="panel" role="tabpanel" id="panel-organizers" aria-labelledby="tab-organizers" hidden>
+          <div class="module">
+            <div class="mock"><div class="mock__screen mock__screen--table"><span class="mock__chip">🏆 LIGA MARTES</span><ul><li><b>1</b> Los Pibes <span>31</span></li><li><b>2</b> Atlético Barrio <span>28</span></li><li><b>3</b> La Banda FC <span>24</span></li><li><b>4</b> Deportivo Norte <span>19</span></li></ul></div></div>
+            <div class="module__body">
+              <h3 data-i18n="mod.org.h">Fixture, tabla y pagos en piloto automático</h3>
+              <p data-i18n="mod.org.p">Genera el calendario, cobra inscripciones, aplica sanciones y publica resultados — todo desde el celular.</p>
+              <p class="metric" data-i18n="mod.org.m">Reserva de canchas sin choques de horario y recordatorios automáticos a capitanes.</p>
+              <a href="#register" class="link" data-i18n="mod.explore">Explorar →</a>
+            </div>
+          </div>
+        </div>
+        <div class="panel" role="tabpanel" id="panel-fans" aria-labelledby="tab-fans" hidden>
+          <div class="module">
+            <figure class="module__photo"><img src="img/action.webp" width="1000" height="667" loading="lazy" decoding="async" alt="Acción de partido con jugadores disputando el balón" /></figure>
+            <div class="module__body">
+              <h3 data-i18n="mod.fans.h">Sigue tu liga como si fuera la Champions</h3>
+              <p data-i18n="mod.fans.p">Resultados en vivo, votación de MVP, highlights en video y el chat del torneo en un solo lugar.</p>
+              <p class="metric" data-i18n="mod.fans.m">Notificaciones de gol en menos de 3 segundos.</p>
+              <a href="#register" class="link" data-i18n="mod.explore">Explorar →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 5. LIVE STATS + GALLERY ===================== -->
+    <section class="section stats" id="stats" aria-labelledby="statsTitle">
+      <div class="container">
+        <h2 id="statsTitle" class="h2 reveal" data-i18n="stats.title">El motor de estadísticas, en acción</h2>
+        <p class="sub reveal" data-i18n="stats.sub">Vista previa con datos de ejemplo. Conecta tu liga y verás los tuyos.</p>
+
+        <!-- Skeletons shown until JS "loads" the sample data. CUSTOMIZE: wire to your API. -->
+        <div class="stat-grid reveal" id="statGrid" aria-live="polite">
+          <article class="scard skeleton"><h3 data-i18n="stats.scorers">Máximos goleadores</h3><ol class="scard__list" data-fill="scorers"></ol></article>
+          <article class="scard skeleton"><h3 data-i18n="stats.clean">Vallas invictas</h3><ol class="scard__list" data-fill="clean"></ol></article>
+          <article class="scard skeleton"><h3 data-i18n="stats.heat">Mapa de calor</h3><div class="heat" data-fill="heat" aria-label="Mapa de calor de posesión"></div></article>
+        </div>
+
+        <div class="masonry reveal" aria-label="Galería">
+          <figure class="shot"><img src="img/hero.webp" width="1600" height="1067" loading="lazy" decoding="async" alt="Partido nocturno bajo las luces del estadio" /><figcaption data-i18n="gal.1">Partido nocturno · Liga Jueves</figcaption></figure>
+          <figure class="shot shot--tall"><img src="img/ambassador.webp" width="700" height="695" loading="lazy" decoding="async" alt="Jugador en sesión de entrenamiento" /><figcaption data-i18n="gal.2">Sesión de entrenamiento</figcaption></figure>
+          <figure class="shot"><img src="img/community.webp" width="1000" height="732" loading="lazy" decoding="async" alt="Entrenamiento comunitario con niños" /><figcaption data-i18n="gal.3">Escuela de fútbol comunitaria</figcaption></figure>
+          <figure class="shot shot--mock"><div class="mock mock--sm"><div class="mock__screen mock__screen--mvp"><span class="mock__chip">🎯 MVP</span><strong>Vota</strong><em>Jornada 12</em></div></div><figcaption data-i18n="gal.4">Votación MVP en la app</figcaption></figure>
+          <figure class="shot"><img src="img/pitch.webp" width="1000" height="667" loading="lazy" decoding="async" alt="Cancha de club amateur" /><figcaption data-i18n="gal.5">La cancha de barrio, lista</figcaption></figure>
+          <figure class="shot"><img src="img/action.webp" width="1000" height="667" loading="lazy" decoding="async" alt="Jugadores disputando el balón" /><figcaption data-i18n="gal.6">Highlight de la jornada</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 6. COMMUNITY / AMBASSADORS ===================== -->
+    <section class="section ambassadors" id="community" aria-labelledby="ambTitle">
+      <div class="container">
+        <h2 id="ambTitle" class="h2 reveal" data-i18n="amb.title">La comunidad que ya juega con Golazo</h2>
+        <!-- SAMPLE PROFILES. The people pictured are not Golazo users — replace photos and copy with real ambassadors (see img/CREDITS.md). -->
+        <div class="amb-grid">
+          <article class="amb reveal">
+            <img src="img/ambassador.webp" width="700" height="695" loading="lazy" decoding="async" alt="" />
+            <div class="amb__body">
+              <span class="chip chip--sample" data-i18n="amb.sample">Perfil de ejemplo</span>
+              <h3 data-i18n="amb.1.n">Capitán · Liga Norte</h3>
+              <p data-i18n="amb.1.d">Mediocampista · 4 temporadas · 2 títulos de liga</p>
+            </div>
+          </article>
+          <article class="amb reveal">
+            <img src="img/coach.webp" width="1000" height="667" loading="lazy" decoding="async" alt="" />
+            <div class="amb__body">
+              <span class="chip chip--sample" data-i18n="amb.sample">Perfil de ejemplo</span>
+              <h3 data-i18n="amb.2.n">Director Técnico · Academia Sur</h3>
+              <p data-i18n="amb.2.d">Dirige 3 categorías · 60 jugadores en plantel</p>
+            </div>
+          </article>
+          <article class="amb reveal">
+            <img src="img/community.webp" width="1000" height="732" loading="lazy" decoding="async" alt="" />
+            <div class="amb__body">
+              <span class="chip chip--sample" data-i18n="amb.sample">Perfil de ejemplo</span>
+              <h3 data-i18n="amb.3.n">Organizador · Torneo de los Martes</h3>
+              <p data-i18n="amb.3.d">12 equipos · 3 canchas · 180 jugadores</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 7. TESTIMONIALS ===================== -->
+    <section class="section testimonials" id="testimonials" aria-labelledby="testTitle">
+      <div class="container">
+        <h2 id="testTitle" class="h2 reveal" data-i18n="test.title">Lo que dicen en la cancha</h2>
+        <!-- SAMPLE REVIEWS: replace with real App Store / Google Play reviews before publishing. -->
+        <div class="carousel reveal" id="carousel" aria-roledescription="carrusel">
+          <div class="carousel__track">
+            <blockquote class="tcard is-active" aria-hidden="false">
+              <p class="tcard__stars" aria-label="5 de 5 estrellas">★★★★★</p>
+              <p class="tcard__quote" data-i18n="test.1.q">“Me salvó la vida organizando el torneo de los martes. Fixture, tabla y cobros en una tarde.”</p>
+              <footer><strong data-i18n="test.1.n">Mariana R.</strong> · <span data-i18n="test.1.r">Organizadora</span></footer>
+            </blockquote>
+            <blockquote class="tcard" aria-hidden="true">
+              <p class="tcard__stars" aria-label="5 de 5 estrellas">★★★★★</p>
+              <p class="tcard__quote" data-i18n="test.2.q">“Por fin mis goles cuentan en algún lado. El mapa de calor me mostró que juego demasiado por la izquierda.”</p>
+              <footer><strong data-i18n="test.2.n">Diego A.</strong> · <span data-i18n="test.2.r">Capitán</span></footer>
+            </blockquote>
+            <blockquote class="tcard" aria-hidden="true">
+              <p class="tcard__stars" aria-label="4 de 5 estrellas">★★★★☆</p>
+              <p class="tcard__quote" data-i18n="test.3.q">“Registro tarjetas y sanciones desde el celular y los capitanes dejan de discutir. Falta modo oscuro en el reloj.”</p>
+              <footer><strong data-i18n="test.3.n">Luis P.</strong> · <span data-i18n="test.3.r">Árbitro</span></footer>
+            </blockquote>
+          </div>
+          <div class="carousel__nav">
+            <button type="button" class="carousel__btn" data-dir="-1" aria-label="Anterior">‹</button>
+            <div class="carousel__dots" role="tablist" aria-label="Testimonios"></div>
+            <button type="button" class="carousel__btn" data-dir="1" aria-label="Siguiente">›</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 8. ONBOARDING / REGISTRATION ===================== -->
+    <section class="section register" id="register" aria-labelledby="regTitle">
+      <div class="container register__inner">
+        <div class="register__copy reveal">
+          <h2 id="regTitle" class="h2" data-i18n="reg.title">Empieza gratis en 3 pasos</h2>
+          <p class="sub" data-i18n="reg.sub">Sin tarjeta. Sin anuncios. Tus datos son tuyos.</p>
+          <!-- CUSTOMIZE: real App Store / Google Play URLs -->
+          <div class="stores">
+            <a class="store" href="#" aria-label="Descargar en App Store"><span class="store__k">Descargar en</span><span class="store__n">App Store</span></a>
+            <a class="store" href="#" aria-label="Disponible en Google Play"><span class="store__k">Disponible en</span><span class="store__n">Google Play</span></a>
+          </div>
+          <p class="legal" data-i18n="reg.legal">Tratamos tus datos conforme al RGPD/CCPA. Nunca vendemos tu información. <a href="#faq">Privacidad</a> · <a href="#faq">Juego limpio</a></p>
+        </div>
+
+        <!-- Client-side only. CUSTOMIZE: POST the collected object to your backend/CRM in submit() (js/app.js). -->
+        <form class="wizard reveal" id="wizard" novalidate>
+          <ol class="wizard__progress" aria-label="Progreso">
+            <li class="is-current" data-i18n="wiz.s1">Rol</li><li data-i18n="wiz.s2">Plataforma</li><li data-i18n="wiz.s3">Cuenta</li>
+          </ol>
+
+          <fieldset class="wstep" data-step="1">
+            <legend data-i18n="wiz.1.l">¿Cómo juegas a Golazo?</legend>
+            <div class="roles">
+              <label class="role"><input type="radio" name="role" value="jugador" required /><span>⚽</span><b data-i18n="wiz.role.player">Jugador</b></label>
+              <label class="role"><input type="radio" name="role" value="entrenador" /><span>📋</span><b data-i18n="wiz.role.coach">Entrenador</b></label>
+              <label class="role"><input type="radio" name="role" value="organizador" /><span>🏆</span><b data-i18n="wiz.role.org">Organizador</b></label>
+            </div>
+            <label class="field"><span data-i18n="wiz.pos">Posición favorita / tipo de liga</span>
+              <select name="position" required>
+                <option value="" data-i18n="wiz.pos.ph">Elige una opción</option>
+                <option value="portero">Portero</option><option value="defensa">Defensa</option>
+                <option value="medio">Mediocampista</option><option value="delantero">Delantero</option>
+                <option value="liga7">Liga fútbol 7</option><option value="liga11">Liga fútbol 11</option>
+              </select>
+            </label>
+            <p class="err" role="alert" hidden></p>
+            <div class="wizard__actions"><button type="button" class="btn btn--primary" data-next data-i18n="wiz.next">Continuar</button></div>
+          </fieldset>
+
+          <fieldset class="wstep" data-step="2" hidden>
+            <legend data-i18n="wiz.2.l">¿Dónde quieres usar la app?</legend>
+            <div class="roles roles--3">
+              <label class="role"><input type="radio" name="platform" value="ios" required /><span></span><b>iOS</b></label>
+              <label class="role"><input type="radio" name="platform" value="android" /><span>🤖</span><b>Android</b></label>
+              <label class="role"><input type="radio" name="platform" value="web" /><span>🌐</span><b>Web</b></label>
+            </div>
+            <label class="field"><span>Email</span><input type="email" name="email" required autocomplete="email" placeholder="tu@correo.com" /></label>
+            <label class="field"><span data-i18n="wiz.phone">Teléfono (WhatsApp)</span><input type="tel" name="phone" autocomplete="tel" placeholder="+52 55 1234 5678" /></label>
+            <p class="err" role="alert" hidden></p>
+            <div class="wizard__actions"><button type="button" class="btn btn--ghost" data-prev data-i18n="wiz.back">Atrás</button><button type="button" class="btn btn--primary" data-next data-i18n="wiz.next">Continuar</button></div>
+          </fieldset>
+
+          <fieldset class="wstep" data-step="3" hidden>
+            <legend data-i18n="wiz.3.l">Crea tu cuenta</legend>
+            <label class="field"><span data-i18n="wiz.name">Nombre</span><input type="text" name="name" required autocomplete="name" minlength="2" /></label>
+            <label class="field"><span data-i18n="wiz.pass">Contraseña</span><input type="password" name="password" required autocomplete="new-password" minlength="8" /><small data-i18n="wiz.pass.h">Mínimo 8 caracteres.</small></label>
+            <label class="check"><input type="checkbox" name="consent" required /><span data-i18n="wiz.consent">Acepto la política de privacidad y las normas de juego limpio.</span></label>
+            <p class="err" role="alert" hidden></p>
+            <div class="wizard__actions"><button type="button" class="btn btn--ghost" data-prev data-i18n="wiz.back">Atrás</button><button type="submit" class="btn btn--primary" data-i18n="wiz.create">Crear cuenta</button></div>
+          </fieldset>
+
+          <div class="wdone" hidden aria-live="polite">
+            <span class="wdone__icon" aria-hidden="true">🥅</span>
+            <h3 data-i18n="wiz.done.h">¡Golazo! Tu cuenta está lista.</h3>
+            <p data-i18n="wiz.done.p">Te enviamos el enlace de descarga por SMS/WhatsApp. Mientras tanto, únete a la comunidad:</p>
+            <!-- CUSTOMIZE: your WhatsApp community invite link -->
+            <a class="btn btn--primary" href="https://chat.whatsapp.com/REPLACE_ME" rel="noopener" data-i18n="wiz.done.cta">Unirme al WhatsApp de Golazo</a>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ===================== 9. FAQ ===================== -->
+    <section class="section faq" id="faq" aria-labelledby="faqTitle">
+      <div class="container narrow">
+        <h2 id="faqTitle" class="h2 reveal" data-i18n="faq.title">Preguntas frecuentes</h2>
+        <!-- Native <details> = keyboard + screen-reader accessible without JS. CUSTOMIZE pricing tiers. -->
+        <details class="qa reveal"><summary data-i18n="faq.1.q">¿Cuánto cuesta Golazo?</summary><p data-i18n="faq.1.a">Jugadores: gratis para siempre. Equipos: plan Pro desde 4,99 USD/mes con stats avanzadas. Ligas: plan Organizador por torneo, con cobro de inscripciones integrado.</p></details>
+        <details class="qa reveal"><summary data-i18n="faq.2.q">¿Funciona sin conexión en la cancha?</summary><p data-i18n="faq.2.a">Sí. Registra goles, tarjetas y cambios sin señal; todo se sincroniza automáticamente cuando recuperas conexión.</p></details>
+        <details class="qa reveal"><summary data-i18n="faq.3.q">¿Cómo se sincronizan las estadísticas?</summary><p data-i18n="faq.3.a">Cada evento se guarda con marca de tiempo en tu dispositivo y se envía cifrado a la nube. Si dos personas registran el mismo partido, Golazo concilia los eventos y marca cualquier conflicto para que el árbitro lo resuelva.</p></details>
+        <details class="qa reveal"><summary data-i18n="faq.4.q">¿Qué pasa con mis datos?</summary><p data-i18n="faq.4.a">Tus datos son tuyos: puedes exportarlos o borrarlos cuando quieras. Cumplimos RGPD y CCPA, no vendemos información y la infraestructura está cifrada en reposo y en tránsito.</p></details>
+        <details class="qa reveal"><summary data-i18n="faq.5.q">¿Puedo conectar un reloj o pulsera deportiva?</summary><p data-i18n="faq.5.a">Sí: Apple Watch, Wear OS y Garmin para distancia recorrida y frecuencia cardíaca. Los GPS de pecho se integran por archivo FIT/GPX.</p></details>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== 10. FOOTER ===================== -->
+  <footer class="footer">
+    <div class="container footer__grid">
+      <div>
+        <a class="logo" href="#top"><svg class="logo__mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M16 6l6 4.4-2.3 7H12.3L10 10.4z" fill="currentColor"/></svg><span class="logo__word">GOLAZO</span></a>
+        <p class="footer__mission" data-i18n="foot.mission">Hacemos que el fútbol amateur se sienta profesional: datos, organización y comunidad para cada cancha del mundo.</p>
+        <div class="stores stores--sm">
+          <a class="store" href="#" aria-label="App Store"><span class="store__n">App Store</span></a>
+          <a class="store" href="#" aria-label="Google Play"><span class="store__n">Google Play</span></a>
+        </div>
+      </div>
+      <nav aria-label="Enlaces rápidos">
+        <h4 data-i18n="foot.links">Enlaces</h4>
+        <a href="#features" data-i18n="nav.features">Funciones</a>
+        <a href="#how" data-i18n="foot.how">Cómo funciona</a>
+        <a href="#faq" data-i18n="nav.pricing">Precios</a>
+        <a href="#community" data-i18n="foot.community">Comunidad</a>
+      </nav>
+      <div>
+        <h4 data-i18n="foot.support">Soporte</h4>
+        <p>Lun–Sáb · 9:00–21:00</p>
+        <!-- CUSTOMIZE: support email -->
+        <a href="mailto:hola@golazo.app">hola@golazo.app</a>
+        <div class="social" aria-label="Redes sociales">
+          <a href="#" aria-label="TikTok">TikTok</a><a href="#" aria-label="Instagram">Instagram</a><a href="#" aria-label="YouTube">YouTube</a><a href="#" aria-label="X">X</a>
+        </div>
+      </div>
+      <div>
+        <h4 data-i18n="foot.legal">Legal</h4>
+        <a href="#" data-i18n="foot.privacy">Privacidad</a>
+        <a href="#" data-i18n="foot.terms">Términos</a>
+        <a href="#" data-i18n="foot.fairplay">Juego limpio y anti-acoso</a>
+        <p class="badges"><span class="chip">🔒 <span data-i18n="foot.secure">Nube cifrada</span></span><span class="chip">✅ RGPD · CCPA</span></p>
+      </div>
+    </div>
+    <div class="container footer__bar">
+      <span>© 2026 Golazo</span>
+      <span class="chip"><i class="dot" aria-hidden="true"></i> v2.4.1 · <span data-i18n="foot.status">todos los sistemas operativos</span></span>
+    </div>
+  </footer>
+
+  <!-- Mobile sticky bar + floating community button -->
+  <div class="mobile-bar" aria-hidden="false">
+    <a href="#register" class="btn btn--primary" data-i18n="mb.download">Descargar App</a>
+    <a href="#faq" class="btn btn--ghost" data-i18n="mb.support">Soporte</a>
+  </div>
+  <!-- CUSTOMIZE: WhatsApp / Discord community link -->
+  <a class="fab" href="https://chat.whatsapp.com/REPLACE_ME" rel="noopener" aria-label="¿Dudas? Únete al chat">
+    <span aria-hidden="true">💬</span><span class="fab__label" data-i18n="fab">¿Dudas? Únete al chat</span>
+  </a>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
