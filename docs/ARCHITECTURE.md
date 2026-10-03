@@ -30,7 +30,7 @@ flowchart TB
     end
 
     subgraph AWS["AWS account (single region)"]
-        oidc["IAM OIDC provider<br/>token.actions.githubusercontent.com"]
+        oidc["IAM OIDC provider<br/>token.actions.githubusercontent.com<br/>(account-wide, shared — owned by el-gusguerillo-oidc CFN stack; read-only here)"]
         role["IAM role: …-gha-deploy<br/>(resource-scoped, ≤1h sessions)"]
 
         subgraph BOOT["infra/bootstrap (admin-applied, account-level)"]

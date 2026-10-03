@@ -6,7 +6,7 @@
 # depend on:
 #   * KMS CMK + S3 bucket for Terraform state (SSE-KMS, versioned,
 #     public access blocked, TLS-only + KMS-only bucket policy)
-#   * GitHub Actions OIDC provider
+#   * (reads the account-wide GitHub OIDC provider — owned elsewhere)
 #   * an IAM role GitHub Actions assumes via OIDC, scoped to this repo,
 #     with least-privilege permissions (no static access keys anywhere)
 #
@@ -176,20 +176,17 @@ resource "aws_dynamodb_table" "tf_lock" {
 
 ########################################################################
 # GitHub Actions OIDC federation
+#
+# The OIDC *provider* (token.actions.githubusercontent.com) is one per
+# AWS account and is shared with other projects in this account — it is
+# owned by the el-gusguerillo CloudFormation stack `el-gusguerillo-oidc`.
+# This stack therefore only READS it and manages its own role. Never
+# turn this back into a managed resource: `apply` would fail with
+# EntityAlreadyExists and `destroy` would delete it from under every
+# other project's workflows (that happened once, on 2026-10-02).
 ########################################################################
-resource "aws_iam_openid_connect_provider" "github" {
-  url            = "https://token.actions.githubusercontent.com"
-  client_id_list = ["sts.amazonaws.com"]
-
-  # GitHub's OIDC certificate thumbprints. Since mid-2023 AWS STS no
-  # longer actually verifies this value for IdPs whose certificate
-  # chains to a trusted root CA (GitHub's does), but the API still
-  # requires at least one entry. Both currently-published values are
-  # listed for resilience across GitHub's cert rotations.
-  thumbprint_list = [
-    "6938fd4d98bab03faadb97b34396831e3780aea1",
-    "1c58a3a8518e8759bf075b76b750d4f2df264fcd",
-  ]
+data "aws_iam_openid_connect_provider" "github" {
+  url = "https://token.actions.githubusercontent.com"
 }
 
 data "aws_iam_policy_document" "github_trust" {
@@ -199,7 +196,7 @@ data "aws_iam_policy_document" "github_trust" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
     }
 
     condition {

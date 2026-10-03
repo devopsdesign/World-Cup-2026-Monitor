@@ -56,7 +56,7 @@ IAM role ──▶ SSM Run Command ─▶ node (`k3s kubectl` locally) ─▶ AP
 
 | Control | Resource | Standard |
 |---|---|---|
-| No long-lived CI keys — GitHub OIDC → scoped role | `aws_iam_openid_connect_provider`, `aws_iam_role.github_actions` | CIS 1.x, SLSA |
+| No long-lived CI keys — GitHub OIDC → scoped role (the account-wide OIDC *provider* is shared with other projects and owned by the `el-gusguerillo-oidc` CloudFormation stack; this project only reads it via `data "aws_iam_openid_connect_provider"`) | `aws_iam_role.github_actions` | CIS 1.x, SLSA |
 | CI role is resource-scoped (S3/DynamoDB/KMS to named ARNs; EC2 pinned to one region; IAM to `…-node-*`; `PassRole` only to `ec2.amazonaws.com`) | `aws_iam_role_policy.github_actions` | Least privilege |
 | Default EBS encryption on for the region | `aws_ebs_encryption_by_default` | CIS 2.2.1 |
 | Account-wide S3 Block Public Access | `aws_s3_account_public_access_block` | CIS 2.1.5 |
