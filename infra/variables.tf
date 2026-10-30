@@ -32,9 +32,9 @@ variable "tf_lock_table" {
 }
 
 variable "grafana_nodeport_cidr" {
-  description = "CIDR allowed to reach the Grafana NodePort (30030). Defaults to open, but you should restrict this to your own IP/32 if you don't need Grafana to be public."
+  description = "CIDR allowed to reach the Grafana NodePort (30030). Defaults to closed; set it to your own IP/32 to open Grafana to yourself."
   type        = string
-  default     = "0.0.0.0/0"
+  default     = "127.0.0.1/32"
 }
 
 variable "budget_alert_email" {
