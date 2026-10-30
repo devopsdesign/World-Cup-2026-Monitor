@@ -367,6 +367,14 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     }
   }
 
+  # --- SSM Parameter Store: the Grafana admin password (SecureString) ---
+  statement {
+    sid       = "PutGrafanaPassword"
+    effect    = "Allow"
+    actions   = ["ssm:PutParameter"]
+    resources = ["arn:aws:ssm:${var.aws_region}:${local.account_id}:parameter/${var.project_name}/grafana-admin-password"]
+  }
+
   statement {
     sid       = "CallerIdentity"
     effect    = "Allow"

@@ -21,6 +21,8 @@ the cache so a flaky upstream never takes the whole app down.
 
 import asyncio
 import logging
+import os
+import secrets
 import time
 from collections import Counter
 from contextlib import asynccontextmanager
@@ -28,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, Counter as PromCounter, Gauge, Histogram, generate_latest
@@ -352,7 +354,13 @@ async def api_tournament() -> JSONResponse:
 
 
 @app.get("/metrics")
-async def metrics() -> PlainTextResponse:
+async def metrics(request: Request) -> PlainTextResponse:
+    # The NodePort is public, so /metrics needs the scrape token that Prometheus
+    # sends. Fail closed: with no token configured there are no metrics at all.
+    expected = os.environ.get("METRICS_TOKEN", "")
+    supplied = request.headers.get("authorization", "")
+    if not expected or not secrets.compare_digest(supplied.encode(), f"Bearer {expected}".encode()):
+        raise HTTPException(status_code=404)
     # Only the derived, request-time value is set here. The recap gauges
     # are owned exclusively by _refresh_once().
     async with _cache_lock:

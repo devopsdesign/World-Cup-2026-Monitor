@@ -152,6 +152,22 @@ data "aws_iam_policy_document" "manifest_bucket_read" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "grafana_password_read" {
+  statement {
+    sid       = "ReadGrafanaPassword"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/grafana-admin-password"]
+  }
+}
+
+resource "aws_iam_role_policy" "grafana_password_read" {
+  name   = "grafana-password-read"
+  role   = aws_iam_role.k3s_node.id
+  policy = data.aws_iam_policy_document.grafana_password_read.json
+}
+
 resource "aws_iam_role_policy" "manifest_bucket_read" {
   name   = "manifest-bucket-read"
   role   = aws_iam_role.k3s_node.id

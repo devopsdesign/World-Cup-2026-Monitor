@@ -200,8 +200,6 @@ jobs:
 
       - name: Render manifests
         if: env.TF_ACTION == 'apply'
-        env:
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: |
           rm -rf rendered
           cp -r k8s rendered
@@ -214,13 +212,23 @@ jobs:
           cp scripts/import-dashboards.sh rendered/
           cp -r docs/dashboards rendered/dashboards
 
-          # Generated at deploy time from the GitHub Actions secret — this
-          # file is never committed to git and never printed.
-          kubectl create secret generic grafana-admin-credentials \
-            --namespace world-cup-monitoring \
-            --from-literal=admin-user=admin \
-            --from-literal=admin-password="$GRAFANA_ADMIN_PASSWORD" \
-            --dry-run=client -o yaml > rendered/monitoring/grafana-secret.yaml
+          # Secrets never go into the rendered folder: it is synced to S3. The
+          # Grafana password lives in SSM Parameter Store (next steps).
+          if find rendered -iname '*secret*' | grep -q .; then
+            echo "::error::a secret-looking file is in rendered/; refusing to upload it to S3"
+            exit 1
+          fi
+
+      - name: Store Grafana admin password in SSM Parameter Store
+        if: env.TF_ACTION == 'apply'
+        env:
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          aws ssm put-parameter \
+            --name "/world-cup-monitor/grafana-admin-password" \
+            --type SecureString \
+            --overwrite \
+            --value "$GRAFANA_ADMIN_PASSWORD" >/dev/null
 
       - name: Stage manifests to S3
         if: env.TF_ACTION == 'apply'
@@ -300,6 +308,20 @@ jobs:
           }
 
           k3s kubectl apply -f /tmp/k8s/namespace.yaml
+
+          # Grafana admin password: read on the node from SSM, never written to S3.
+          GF_PW=$(aws ssm get-parameter --name "/world-cup-monitor/grafana-admin-password" \
+            --with-decryption --query 'Parameter.Value' --output text)
+          k3s kubectl -n "$NS" create secret generic grafana-admin-credentials \
+            --from-literal=admin-user=admin --from-literal=admin-password="$GF_PW" \
+            --dry-run=client -o yaml | k3s kubectl apply -f -
+          unset GF_PW
+
+          # Scrape token for /metrics: generated once on the node, then kept stable.
+          if ! k3s kubectl -n "$NS" get secret metrics-scrape-token >/dev/null 2>&1; then
+            k3s kubectl -n "$NS" create secret generic metrics-scrape-token \
+              --from-literal=token="$(openssl rand -hex 32)"
+          fi
           # Retired Prometheus RBAC is cluster-scoped: `apply` in a namespace dir won't prune it.
           k3s kubectl delete clusterrole prometheus-cluster-role --ignore-not-found
           k3s kubectl delete clusterrolebinding prometheus-cluster-role-binding --ignore-not-found
